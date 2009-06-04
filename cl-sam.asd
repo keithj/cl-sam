@@ -37,10 +37,12 @@
               :serial t
               :pathname "src/"
               :components ((:file "package")
-                           (:file "bgzf-ffi")
                            (:file "conditions")
-                           (:file "bam-parser")
-                           (:file "bgzf-stream")))
+                           (:file "bgzf-ffi")
+                           (:file "bgzf-reader")
+                           (:file "bgzf-stream")
+                           (:file "bam-reader")
+                           (:file "bam")))
      (:lift-test-config :lift-tests
                         :pathname "cl-sam-test.config"
                         :target-system :cl-sam)

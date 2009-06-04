@@ -17,106 +17,10 @@
 
 (in-package :sam)
 
-(defconstant +bam-magic+ #(66 65 77 1)
-  "The BAM file magic header bytes.")
 (defconstant +null-byte+ #x00
   "The termination byte for BAM strings.")
 (defconstant +tag-size+ 2
   "The size of a BAM auxilliary tag in bytes.")
-
-(defstruct bgzf
-  (file "" :type t)
-  (ptr nil :type t)
-  (open-p nil :type t))
-
-(defun read-bytes (bgzf n)
-  "Reads N bytes from the handle BGZF and returns them as a Lisp array
-of unsigned-byte 8. If fewer than N bytes are available an a
-{define-condition bgzf-read-error} is raised."
-  (declare (optimize (speed 3)))
-  (declare (type fixnum n))
-  (with-foreign-object (array-ptr :unsigned-char n)
-    (let ((num-read (bgzf-ffi:bgzf-read (bgzf-ptr bgzf) array-ptr n)))
-      (declare (type fixnum num-read))
-      (cond ((zerop num-read)
-             nil)
-            ((< num-read n)
-             (error 'bgzf-io-error
-                    :text (format nil #.(txt "expected to read ~a bytes"
-                                             "but only ~a were available")
-                                  n num-read)))
-            (t
-             (let ((buffer (make-array n :element-type '(unsigned-byte 8))))
-               (loop
-                  for i from 0 below n
-                  do (setf (aref buffer i)
-                           (mem-aref array-ptr :unsigned-char i)))
-               buffer))))))
-
-(defun read-string (bgzf n &key null-terminated)
-  "Reads N characters from handle BGZF and returns them as a Lisp
-string. The NULL-TERMINATED keyword is used to indicate whether the C
-string is null-terminated so that the terminator may be consumed."
-  (let ((len (if null-terminated
-                 (1- n)
-               n)))
-    (let ((bytes (read-bytes bgzf n)))
-      (make-sb-string bytes 0 (1- len)))))
-
-(defun bgzf-open (filespec &key (direction :input))
-  (let ((ptr (bgzf-ffi:bgzf-open (namestring filespec) (ecase direction
-                                                         (:input "r")
-                                                         (:output "w")))))
-    (when (null-pointer-p ptr)
-      (error 'bgzf-io-error :errno unix-ffi:*error-number*
-             :text (format nil "failed to open ~a" filespec)))
-    (make-bgzf :file filespec :ptr ptr :open-p t)))
-
-(defun bgzf-close (bgzf)
-  (when (bgzf-open-p bgzf)
-    (if (zerop (bgzf-ffi:bgzf-close (bgzf-ptr bgzf)))
-        t
-      (error 'bgzf-io-error :errno unix-ffi:*error-number*
-             :text (format nil "failed to close ~a cleanly" bgzf)))))
-
-(defun read-bam-magic (bgzf)
-  "Reads the BAM magic number from the handle BGZF and returns T if it
-is valid or raises a {define-condition malformed-file-error} if not."
-  (let ((magic (read-bytes bgzf 4)))
-    (unless (equalp +bam-magic+ magic)
-      (error 'malformed-file-error :text "invalid BAM magic number"))
-    t))
-
-(defun read-bam-header (bgzf)
-  "Returns the unparsed BAM header from the handle BGZF as a Lisp
-string."
-  (let ((len (decode-int32le (read-bytes bgzf 4))))
-    (when (plusp len)
-      (read-string bgzf len))))
-
-(defun read-num-references (bgzf)
-  "Returns the number of reference sequences described in the BAM
-header of handle BGZF."
-  (decode-int32le (read-bytes bgzf 4)))
-
-(defun read-reference-meta (bgzf)
-  "Returns the reference sequence metadata for a single reference
-sequence described in the BAM header of handle BGZF. Two values are
-returned, the reference name as a string and the reference length as
-an integer,"
-  (let ((len (decode-int32le (read-bytes bgzf 4))))
-    (values (read-string bgzf len :null-terminated t)
-            (decode-int32le (read-bytes bgzf 4)))))
-
-(defun read-alignment (bgzf)
-  "Reads one alignment block from handle BGZF, returns it as a Lisp
-array of unsigned-byte 8. The handle is advanced to the next
-alignment. If no more alignments are available, returns NIL."
-  (let ((size-bytes (read-bytes bgzf 4)))
-    (if (null size-bytes)
-        nil
-      (let ((block-size (decode-int32le size-bytes)))
-        (read-bytes bgzf block-size)))))
 
 (defun reference-id (alignment-record)
   (decode-int32le alignment-record 0))
@@ -138,6 +42,37 @@ alignment. If no more alignments are available, returns NIL."
 
 (defun alignment-flag (alignment-record)
   (decode-uint16le alignment-record 14))
+
+(defun sequenced-pair-p (flag)
+  (logbitp 0 flag))
+
+(defun mapped-proper-pair-p (flag)
+  (logbitp 1 flag))
+
+(defun query-unmapped-p (flag)
+  (logbitp 2 flag))
+
+(defun mate-unmapped-p (flag)
+  (logbitp 3 flag))
+
+(defun query-forward-p (flag)
+  (not (logbitp 4 flag)))
+
+(defun mate-forward-p (flag)
+  (not (logbitp 5 flag)))
+
+(defun first-in-pair-p (flag)
+  (logbitp 6 flag))
+
+(defun second-in-pair-p (flag)
+  (logbitp 7 flag))
+
+(defun alignment-not-primary-p (flag)
+  (logbitp 8 flag))
+
+(defun pcr/optical-duplicate-p (flag)
+  (logbitp 9 flag))
+
 
 (defun read-length (alignment-record)
   (decode-int32le alignment-record 16))
@@ -327,35 +262,3 @@ INDEX. The BAM two-letter data keys are transformed to Lisp keywords."
                             (setf tag-index (+ val-index 2))
                             (decode-int16le alignment-record val-index)))))
                (list tag val))))
-
-(defun sequenced-pair-p (flags)
-  (logbitp 0 flags))
-
-(defun mapped-proper-pair-p (flags)
-  (logbitp 1 flags))
-
-(defun query-unmapped-p (flags)
-  (logbitp 2 flags))
-
-(defun mate-unmapped-p (flags)
-  (logbitp 3 flags))
-
-(defun query-forward-p (flags)
-  (not (logbitp 4 flags)))
-
-(defun mate-forward-p (flags)
-  (not (logbitp 5 flags)))
-
-(defun first-in-pair-p (flags)
-  (logbitp 6 flags))
-
-(defun second-in-pair-p (flags)
-  (logbitp 7 flags))
-
-(defun alignment-not-primary-p (flags)
-  (logbitp 8 flags))
-
-(defun pcr/optical-duplicate-p (flags)
-  (logbitp 9 flags))
-
-

@@ -39,6 +39,7 @@
 
    ;; BGZF handle API
    #:bgzf
+   #:bzgf-p
    #:bgzf-file
    #:bgzf-open-p
    #:bgzf-open
