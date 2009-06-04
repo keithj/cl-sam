@@ -1,0 +1,3 @@
+*.bam -crlf -diff -merge
+*.map -crlf -diff -merge
+*.dat -crlf -diff -merge
