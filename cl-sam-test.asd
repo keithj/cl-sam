@@ -15,20 +15,12 @@
 ;;; along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ;;;
 
-(in-package :sam)
+(in-package :cl-sam-system)
 
-(define-condition bgzf-io-error (io-error)
-  ((text :initform nil
-         :initarg :text
-         :reader text-of
-         :documentation "Error message text.")
-   (errno :initform nil
-          :initarg :errno
-          :reader errno-of
-          :documentation "The C error number."))
-  (:report (lambda (condition stream)
-             (format stream "BGZF error~@[ ~d~]~@[: ~a~]"
-                     (errno-of condition) (text-of condition))))
-  (:documentation "A condition raised when an error occurs reading
-  from or writing to a BGZF file."))
-
+(defsystem cl-sam-test
+    :depends-on (:cl-sam :lift)
+    :components ((:module :cl-sam-test
+                          :serial t
+                          :pathname "src/test/"
+                          :components ((:file "package")
+                                       (:file "cl-sam-test")))))

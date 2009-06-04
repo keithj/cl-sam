@@ -18,33 +18,33 @@
 (in-package :cl-user)
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
-  (when (asdf:find-system :cl-system-utilities nil)
-    (asdf:operate 'asdf:load-op :cl-system-utilities)))
+  (when (asdf:find-system :deoxybyte-systems nil)
+    (asdf:operate 'asdf:load-op :deoxybyte-systems)))
 
-(defpackage #:cl-sam-system
-  (:use :common-lisp :asdf :cl-system-utilities))
+(defpackage :cl-sam-system
+  (:use :common-lisp :asdf :deoxybyte-systems))
 
-
-(in-package #:cl-sam-system)
+(in-package :cl-sam-system)
 
 (defsystem cl-sam
     :name "cl-sam"
     :author "Keith James"
     :licence "GPL v3"
-    :depends-on (:cffi :cl-io-utilities :cl-gp-utilities)
+    :depends-on (:cffi :deoxybyte-utilities :deoxybyte-io :deoxybyte-unix)
     :in-order-to ((test-op (load-op :cl-sam :cl-sam-test)))
     :components
     ((:module :cl-sam
               :serial t
               :pathname "src/"
               :components ((:file "package")
-                           (:file "bgzf-cffi")
+                           (:file "bgzf-ffi")
                            (:file "conditions")
-                           (:file "bam-parser")))
+                           (:file "bam-parser")
+                           (:file "bgzf-stream")))
      (:lift-test-config :lift-tests
                         :pathname "cl-sam-test.config"
                         :target-system :cl-sam)
      (:cldoc-config :cldoc-documentation
-                    :pathname "doc/html"
+                    :pathname "doc/html/"
                     :target-system :cl-sam)))
 

@@ -24,18 +24,26 @@
 (defconstant +tag-size+ 2
   "The size of a BAM auxilliary tag in bytes.")
 
-(defun read-bytes (bgzf-ptr n)
-  "Reads N bytes from the BGZF handle BGZF-PTR and returns them as a
-Lisp array of unsigned-byte 8. If fewer than N bytes are available an
-a {define-condition bgzf-read-error} is raised."
+(defstruct bgzf
+  (file "" :type t)
+  (ptr nil :type t)
+  (open-p nil :type t))
+
+(defun read-bytes (bgzf n)
+  "Reads N bytes from the handle BGZF and returns them as a Lisp array
+of unsigned-byte 8. If fewer than N bytes are available an a
+{define-condition bgzf-read-error} is raised."
+  (declare (optimize (speed 3)))
+  (declare (type fixnum n))
   (with-foreign-object (array-ptr :unsigned-char n)
-    (let ((num-read (bgzf-read bgzf-ptr array-ptr n)))
+    (let ((num-read (bgzf-ffi:bgzf-read (bgzf-ptr bgzf) array-ptr n)))
+      (declare (type fixnum num-read))
       (cond ((zerop num-read)
              nil)
             ((< num-read n)
-             (error 'bgzf-read-error
-                    :text (format nil (txt "expected to read ~a bytes"
-                                           "but only ~a were available")
+             (error 'bgzf-io-error
+                    :text (format nil #.(txt "expected to read ~a bytes"
+                                             "but only ~a were available")
                                   n num-read)))
             (t
              (let ((buffer (make-array n :element-type '(unsigned-byte 8))))
@@ -45,52 +53,70 @@ a {define-condition bgzf-read-error} is raised."
                            (mem-aref array-ptr :unsigned-char i)))
                buffer))))))
 
-(defun read-string (bgzf-ptr n &key null-terminated)
-  "Reads N characters from BGZF handle BGZF-PTR and returns them as a
-Lisp string. The NULL-TERMINATED keyword is used to indicate whether
-the C string is null-terminated so that the terminator may be
-consumed."
+(defun read-string (bgzf n &key null-terminated)
+  "Reads N characters from handle BGZF and returns them as a Lisp
+string. The NULL-TERMINATED keyword is used to indicate whether the C
+string is null-terminated so that the terminator may be consumed."
   (let ((len (if null-terminated
                  (1- n)
                n)))
-    (let ((bytes (read-bytes bgzf-ptr n)))
+    (let ((bytes (read-bytes bgzf n)))
       (make-sb-string bytes 0 (1- len)))))
 
-(defun read-bam-magic (bgzf-ptr)
-  "Reads the BAM magic number from the BGZF handle BGZF-PTR and
-returns T if it is valid or raises a {define-condition malformed-file-error}
-if not."
-  (let ((magic (read-bytes bgzf-ptr 4)))
+(defun bgzf-open (filespec &key (direction :input))
+  (let ((ptr (bgzf-ffi:bgzf-open (namestring filespec) (ecase direction
+                                                         (:input "r")
+                                                         (:output "w")))))
+    (when (null-pointer-p ptr)
+      (error 'bgzf-io-error :errno unix-ffi:*error-number*
+             :text (format nil "failed to open ~a" filespec)))
+    (make-bgzf :file filespec :ptr ptr :open-p t)))
+
+(defun bgzf-close (bgzf)
+  (when (bgzf-open-p bgzf)
+    (if (zerop (bgzf-ffi:bgzf-close (bgzf-ptr bgzf)))
+        t
+      (error 'bgzf-io-error :errno unix-ffi:*error-number*
+             :text (format nil "failed to close ~a cleanly" bgzf)))))
+
+(defun read-bam-magic (bgzf)
+  "Reads the BAM magic number from the handle BGZF and returns T if it
+is valid or raises a {define-condition malformed-file-error} if not."
+  (let ((magic (read-bytes bgzf 4)))
     (unless (equalp +bam-magic+ magic)
       (error 'malformed-file-error :text "invalid BAM magic number"))
     t))
 
-(defun read-bam-header (bgzf-ptr)
-  "Returns the unparsed BAM header from the BGZF handle BGZF-PTR as a
-Lisp string."
-  (let ((len (decode-int32le (read-bytes bgzf-ptr 4))))
+(defun read-bam-header (bgzf)
+  "Returns the unparsed BAM header from the handle BGZF as a Lisp
+string."
+  (let ((len (decode-int32le (read-bytes bgzf 4))))
     (when (plusp len)
-      (read-string bgzf-ptr len))))
+      (read-string bgzf len))))
 
-(defun read-num-references (bgzf-ptr)
+(defun read-num-references (bgzf)
   "Returns the number of reference sequences described in the BAM
-header of BGZF handle BGZF-PTR."
-  (decode-int32le (read-bytes bgzf-ptr 4)))
+header of handle BGZF."
+  (decode-int32le (read-bytes bgzf 4)))
 
-(defun read-reference-meta (bgzf-ptr)
-  (let ((len (decode-int32le (read-bytes bgzf-ptr 4))))
-    (values (read-string bgzf-ptr len :null-terminated t)
-            (decode-int32le (read-bytes bgzf-ptr 4)))))
+(defun read-reference-meta (bgzf)
+  "Returns the reference sequence metadata for a single reference
+sequence described in the BAM header of handle BGZF. Two values are
+returned, the reference name as a string and the reference length as
+an integer,"
+  (let ((len (decode-int32le (read-bytes bgzf 4))))
+    (values (read-string bgzf len :null-terminated t)
+            (decode-int32le (read-bytes bgzf 4)))))
 
-(defun read-alignment (bgzf-ptr)
-  "Reads one alignment block from BGZF handle BGZF-PTR, returns it as
-a Lisp array of unsigned-byte 8. The handle is advanced to the next
+(defun read-alignment (bgzf)
+  "Reads one alignment block from handle BGZF, returns it as a Lisp
+array of unsigned-byte 8. The handle is advanced to the next
 alignment. If no more alignments are available, returns NIL."
-  (let ((size-bytes (read-bytes bgzf-ptr 4)))
+  (let ((size-bytes (read-bytes bgzf 4)))
     (if (null size-bytes)
         nil
       (let ((block-size (decode-int32le size-bytes)))
-        (read-bytes bgzf-ptr block-size)))))
+        (read-bytes bgzf block-size)))))
 
 (defun reference-id (alignment-record)
   (decode-int32le alignment-record 0))
@@ -135,32 +161,25 @@ alignment. If no more alignments are available, returns NIL."
     (decode-cigar alignment-record cigar-index cigar-bytes)))
 
 (defun seq-string (alignment-record)
-  (let* ((read-len (read-length alignment-record))
-         (name-len (read-name-length alignment-record))
-         (cigar-index (+ 32 name-len))
-         (cigar-bytes (* 4 (cigar-length alignment-record)))
-         (seq-index (+ cigar-index cigar-bytes)))
+  (multiple-value-bind (read-len cigar-index cigar-bytes seq-index
+                        seq-bytes qual-index tag-index)
+      (alignment-indices alignment-record)
+    (declare (ignore cigar-index cigar-bytes seq-bytes qual-index tag-index))
     (decode-seq-string alignment-record seq-index read-len)))
 
 (defun qual-string (alignment-record)
-  (let* ((read-len (read-length alignment-record))
-         (name-len (read-name-length alignment-record))
-         (cigar-index (+ 32 name-len))
-         (cigar-bytes (* 4 (cigar-length alignment-record)))
-         (seq-index (+ cigar-index cigar-bytes))
-         (seq-bytes (ceiling read-len 2))
-         (qual-index (+ seq-index seq-bytes)))
+  (multiple-value-bind (read-len cigar-index cigar-bytes seq-index
+                        seq-bytes qual-index tag-index)
+      (alignment-indices alignment-record)
+    (declare (ignore cigar-index cigar-bytes seq-bytes seq-index tag-index))
     (decode-qual-string alignment-record qual-index read-len)))
 
 (defun alignment-tag-values (alignment-record)
-  (let* ((read-len (read-length alignment-record))
-         (name-len (read-name-length alignment-record))
-         (cigar-index (+ 32 name-len))
-         (cigar-bytes (* 4 (cigar-length alignment-record)))
-         (seq-index (+ cigar-index cigar-bytes))
-         (seq-bytes (ceiling read-len 2))
-         (qual-index (+ seq-index seq-bytes))
-         (tag-index (+ qual-index read-len)))
+  (multiple-value-bind (read-len cigar-index cigar-bytes seq-index
+                        seq-bytes qual-index tag-index)
+      (alignment-indices alignment-record)
+    (declare (ignore read-len cigar-index cigar-bytes seq-bytes qual-index
+                     seq-index))
     (decode-tag-values alignment-record tag-index)))
 
 (defun alignment-core (alignment-record)
@@ -183,6 +202,18 @@ alignment. If no more alignments are available, returns NIL."
              :mate-alignment-position :insert-length)
            (alignment-core alignment-record)))
 
+(defun alignment-indices (alignment-record)
+  (let* ((read-len (read-length alignment-record))
+         (name-len (read-name-length alignment-record))
+         (cigar-index (+ 32 name-len))
+         (cigar-bytes (* 4 (cigar-length alignment-record)))
+         (seq-index (+ cigar-index cigar-bytes))
+         (seq-bytes (ceiling read-len 2))
+         (qual-index (+ seq-index seq-bytes))
+         (tag-index (+ qual-index read-len)))
+    (values read-len cigar-index cigar-bytes seq-index seq-bytes
+            qual-index tag-index)))
+
 (defun decode-read-name (alignment-record name-len)
   "Returns a string containing the template/read name of length
 NAME-LEN, encoded at byte 32 in ALIGNMENT-RECORD."
@@ -193,6 +224,9 @@ NAME-LEN, encoded at byte 32 in ALIGNMENT-RECORD."
 (defun decode-seq-string (alignment-record index read-len)
   "Returns a string containing the alignment query sequence of length
 READ-LEN. The sequence must be present in ALIGNMENT-RECORD at INDEX."
+  (declare (optimize (speed 3)))
+  (declare (type (simple-array (unsigned-byte 8) (*)) alignment-record)
+           (type fixnum index read-len))
   (flet ((decode-base (nibble)
            (ecase nibble
              (0 #\=)
@@ -204,7 +238,7 @@ READ-LEN. The sequence must be present in ALIGNMENT-RECORD at INDEX."
     (loop
        with seq = (make-array read-len :element-type 'base-char)
        for i from 0 below read-len
-       for j = (+ index (floor i 2))
+       for j of-type fixnum = (+ index (floor i 2))
        do (setf (char seq i)
                 (decode-base (if (evenp i)
                                  (ldb (byte 4 4) (aref alignment-record j))
@@ -251,15 +285,17 @@ NIL is returned."
 (defun decode-tag-values (alignment-record index)
   "Returns an alist of auxilliary data from ALIGNMENT-RECORD at
 INDEX. The BAM two-letter data keys are transformed to Lisp keywords."
+  (declare (optimize (speed 3)))
+  (declare (type (simple-array (unsigned-byte 8)) alignment-record)
+           (type fixnum index))
   (loop
-     with tag-index = index
+     with tag-index of-type fixnum = index
      while (< tag-index (length alignment-record))
      collect (let* ((type-index (+ tag-index +tag-size+))
                     (type-code (code-char (aref alignment-record type-index)))
                     (val-index (1+ type-index))
-                    (tag (intern (string-upcase
-                                  (make-sb-string alignment-record tag-index
-                                                  (1+ tag-index))) :keyword))
+                    (tag (make-sb-string alignment-record tag-index
+                                         (1+ tag-index)))
                     (val (ecase type-code
                            (#\A         ; A printable character
                             (setf tag-index (+ val-index 1))
@@ -268,11 +304,11 @@ INDEX. The BAM two-letter data keys are transformed to Lisp keywords."
                             (setf tag-index (+ val-index 1))
                             (decode-uint8le alignment-record val-index))
                            ((#\H #\Z) ; H hex string, Z printable string
-                            (let ((len (position +null-byte+ alignment-record
+                            (let ((end (position +null-byte+ alignment-record
                                                  :start val-index)))
-                              (setf tag-index (+ val-index len))
+                              (setf tag-index (1+ end))
                               (make-sb-string alignment-record val-index
-                                              (1- (+ val-index len)))))
+                                              (1- end))))
                            (#\I         ; I unsigned 32-bit integer
                             (setf tag-index (+ val-index 4))
                             (decode-uint32le alignment-record val-index))
@@ -283,14 +319,14 @@ INDEX. The BAM two-letter data keys are transformed to Lisp keywords."
                             (setf tag-index (+ val-index 1))
                             (decode-int8le alignment-record val-index))
                            (#\f         ; f single-precision float
-                            (error "Not implemented.")) ; FIXME
+                            (decode-float32le alignment-record val-index))
                            (#\i         ; i signed 32-bit integer
                             (setf tag-index (+ val-index 4))
                             (decode-int32le alignment-record val-index))
                            (#\s         ; s signed short
                             (setf tag-index (+ val-index 2))
                             (decode-int16le alignment-record val-index)))))
-               (cons tag val))))
+               (list tag val))))
 
 (defun sequenced-pair-p (flags)
   (logbitp 0 flags))
@@ -321,4 +357,5 @@ INDEX. The BAM two-letter data keys are transformed to Lisp keywords."
 
 (defun pcr/optical-duplicate-p (flags)
   (logbitp 9 flags))
+
 

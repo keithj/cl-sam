@@ -15,7 +15,7 @@
 ;;; along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ;;;
 
-(in-package :bgzf-cffi)
+(in-package :bgzf-ffi)
 
 (define-foreign-library libbgz
   (t (:default "libbgzf")))

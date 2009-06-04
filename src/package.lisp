@@ -17,8 +17,8 @@
 
 (in-package :cl-user)
 
-(defpackage #:bgzf-cffi
-  (:use :common-lisp :cffi)
+(defpackage :bgzf-ffi
+  (:use #:common-lisp #:cffi)
   (:export #:bgzf-open
            #:bgzf-close
            #:bgzf-read
@@ -29,13 +29,25 @@
   functions provided by the Broad Institute. See bgzf.h in the
   SAMtools package for function documentation."))
 
-(defpackage #:sam
-  (:use :common-lisp :cffi :ieee-floats
-        :bgzf-cffi :cl-io-utilities :cl-gp-utilities)
+(defpackage :sam
+  (:use #:common-lisp #:cffi #:trivial-gray-streams
+        #:deoxybyte-utilities #:deoxybyte-io)
   (:export
 
    ;; Conditions
-   #:bgzf-read-error
+   #:bgzf-io-error
+
+   ;; BGZF handle API
+   #:bgzf
+   #:bgzf-file
+   #:bgzf-open-p
+   #:bgzf-open
+   #:bgzf-close
+   
+   ;; BGZF stream API
+   #:bgzf-stream
+   #:bgzf-input-stream
+   #:bgzf-stream-open
    
    ;; Low-level BAM reading API
    #:read-bam-magic
