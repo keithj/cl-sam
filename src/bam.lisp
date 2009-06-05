@@ -40,8 +40,14 @@
 (defun cigar-length (alignment-record)
   (decode-uint16le alignment-record 12))
 
-(defun alignment-flag (alignment-record)
-  (decode-uint16le alignment-record 14))
+(defun alignment-flag (alignment-record &key (validate t))
+  (let ((flag (decode-uint16le alignment-record 14)))
+    (when (and validate (not (valid-flag-p flag)))
+      (error 'dxi:malformed-field-error
+             :record (alignment-core alignment-record :validate nil)
+             :field flag
+             :text "pair-specific flags set for unpaired read"))
+    flag))
 
 (defun sequenced-pair-p (flag)
   (logbitp 0 flag))
@@ -70,9 +76,23 @@
 (defun alignment-not-primary-p (flag)
   (logbitp 8 flag))
 
-(defun pcr/optical-duplicate-p (flag)
+(defun fails-platform-qc-p (flag)
   (logbitp 9 flag))
 
+(defun pcr/optical-duplicate-p (flag)
+  (logbitp 10 flag))
+
+(defun valid-flag-p (flag)
+  (if (not (sequenced-pair-p flag))
+      ;; If unpaired, the pair data bits should not be set
+      (and (not (mapped-proper-pair-p flag))
+           (not (mate-unmapped-p flag))
+           (not (mate-forward-p flag))
+           (not (first-in-pair-p flag))
+           (not (second-in-pair-p flag)))
+    ;; If paired, must be a proper pair
+    (or (and (first-in-pair-p flag) (not (second-in-pair-p flag)))
+        (and (second-in-pair-p flag) (not (first-in-pair-p flag))))))
 
 (defun read-length (alignment-record)
   (decode-int32le alignment-record 16))
@@ -117,25 +137,43 @@
                      seq-index))
     (decode-tag-values alignment-record tag-index)))
 
-(defun alignment-core (alignment-record)
+(defun alignment-core (alignment-record &key (validate t))
   (list (reference-id alignment-record)
         (alignment-position alignment-record)
         (read-name-length alignment-record)
         (mapping-quality alignment-record)
         (alignment-bin alignment-record)
         (cigar-length alignment-record)
-        (alignment-flag alignment-record)
+        (alignment-flag alignment-record :validate validate)
         (read-length alignment-record)
         (mate-reference-id alignment-record)
         (mate-alignment-position alignment-record)
         (insert-length alignment-record)))
 
-(defun alignment-core-alist (alignment-record)
+(defun alignment-core-alist (alignment-record &key (validate t))
   (pairlis '(:reference-id :alignment-pos :read-name-length
              :mapping-quality :alignment-bin :cigar-length
              :alignment-flag :read-length :mate-reference-id
              :mate-alignment-position :insert-length)
-           (alignment-core alignment-record)))
+           (alignment-core alignment-record :validate validate)))
+
+(defun alignment-flag-alist (alignment-record &key (validate t))
+  (let ((flag (alignment-flag alignment-record :validate validate)))
+    (pairlis '(:sequenced-pair :mapped-proper-pair :query-unmapped
+               :mate-unmapped :query-forward :mate-forward :first-in-pair
+               :second-in-pair :alignment-not-primary :fails-platform-qc
+               :pcr/optical-duplicate)
+             (list (sequenced-pair-p flag)
+                   (mapped-proper-pair-p flag)
+                   (query-unmapped-p flag)
+                   (mate-unmapped-p flag)
+                   (query-forward-p flag)
+                   (mate-forward-p flag)
+                   (first-in-pair-p flag)
+                   (second-in-pair-p flag)
+                   (alignment-not-primary-p flag)
+                   (fails-platform-qc-p flag)
+                   (pcr/optical-duplicate-p flag)))))
 
 (defun alignment-indices (alignment-record)
   (let* ((read-len (read-length alignment-record))
@@ -161,7 +199,7 @@ NAME-LEN, encoded at byte 32 in ALIGNMENT-RECORD."
 READ-LEN. The sequence must be present in ALIGNMENT-RECORD at INDEX."
   (declare (optimize (speed 3)))
   (declare (type (simple-array (unsigned-byte 8) (*)) alignment-record)
-           (type fixnum index read-len))
+           (type (unsigned-byte 32) index read-len))
   (flet ((decode-base (nibble)
            (ecase nibble
              (0 #\=)
@@ -173,7 +211,7 @@ READ-LEN. The sequence must be present in ALIGNMENT-RECORD at INDEX."
     (loop
        with seq = (make-array read-len :element-type 'base-char)
        for i from 0 below read-len
-       for j of-type fixnum = (+ index (floor i 2))
+       for j of-type (unsigned-byte 32) = (+ index (floor i 2))
        do (setf (char seq i)
                 (decode-base (if (evenp i)
                                  (ldb (byte 4 4) (aref alignment-record j))

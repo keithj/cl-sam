@@ -70,34 +70,100 @@
   (let* ((filespec (namestring (merge-pathnames "data/c1215.bam")))
          (bgzf (bgzf-open filespec)))
     (unwind-protect
-         (ensure (read-bam-magic bgzf))
-      (ensure-null (read-bam-header bgzf)
-                   :report "expected a null header") ; no header
-      (ensure (= 1 (read-num-references bgzf)))
-      (multiple-value-bind (ref len)
-          (read-reference-meta bgzf)
-        (ensure (string= "AL096846" ref)
-                :report "expected reference name \"AL096846\" but found ~s"
-                :arguments (ref))
-        (ensure (= 6490 len)
-                :report "expected reference length 6490 but found ~d"
-                :arguments (len)))
-      (loop
-         for alignment = (read-alignment bgzf)
-         while alignment
-         do (progn
-              (ensure (stringp (read-name alignment)))
-              (let ((core (alignment-core alignment)))
-                (ensure (listp core))
-                (ensure (= 11 (length core))))
-              (let ((seq (seq-string alignment))
-                    (qual (qual-string alignment)))
-                (ensure (stringp seq))
-                (ensure (stringp qual))
-                (ensure (= (length seq) (length qual))))
-              (ensure (listp (alignment-tag-values alignment))))
-         count alignment into n
-         finally (ensure (= 20000 n)
-                         :report "expected ~d alignments, but read ~d"
-                         :arguments (20000 n)))
+         (progn
+           (ensure (read-bam-magic bgzf))
+           (ensure-null (read-bam-header bgzf)
+                        :report "expected a null header") ; no header
+           (ensure (= 1 (read-num-references bgzf)))
+           (multiple-value-bind (ref len)
+               (read-reference-meta bgzf)
+             (ensure (string= "AL096846" ref)
+                     :report "expected reference name \"AL096846\" but found ~s"
+                     :arguments (ref))
+             (ensure (= 6490 len)
+                     :report "expected reference length 6490 but found ~d"
+                     :arguments (len)))
+           (loop
+              for alignment = (read-alignment bgzf)
+              while alignment
+              do (progn
+                   (ensure (stringp (read-name alignment)))
+                   (let ((core (alignment-core alignment)))
+                     (ensure (listp core))
+                     (ensure (= 11 (length core))))
+                   (let ((seq (seq-string alignment))
+                         (qual (qual-string alignment)))
+                     (ensure (stringp seq))
+                     (ensure (stringp qual))
+                     (ensure (= (length seq) (length qual))))
+                   (ensure (listp (alignment-tag-values alignment))))
+              count alignment into n
+              finally (ensure (= 20000 n)
+                              :report "expected ~d alignments, but read ~d"
+                              :arguments (20000 n))))
       (bgzf-close bgzf))))
+
+(addtest (cl-sam-tests) bam-parse/2
+  (let ((expected (with-open-file (s (merge-pathnames
+                                      "data/c1215_fixmate_10reads.sexp"))
+                    (read s)))
+        (found (with-bgzf-file (bgzf (namestring (merge-pathnames
+                                                  "data/c1215_fixmate.bam"))
+                                     :direction :input)
+                 (read-bam-magic bgzf)
+                 (read-bam-header bgzf)
+                 (read-num-references bgzf)
+                 (read-reference-meta bgzf)
+                 (loop
+                    repeat 10
+                    for alignment = (read-alignment bgzf)
+                    collect (list (alignment-core-alist alignment)
+                                  (alignment-flag-alist alignment)
+                                  (alignment-tag-values alignment)
+                                  (alignment-cigar alignment)
+                                  (read-name alignment)
+                                  (seq-string alignment)
+                                  (qual-string alignment)
+                                  (alignment-tag-values alignment))))))
+    (dotimes (i 10)
+      (let ((expected (elt expected i))
+            (found (elt found i))))
+      (ensure (equalp expected found)
+              :report "alignment ~d: expected ~a but found ~a"
+              :arguments (i expected found)))))
+
+(addtest (cl-sam-tests) sequenced-pair-p/1
+  (ensure (sequenced-pair-p #x0001)))
+
+(addtest (cl-sam-tests) mapped-proper-pair-p/1
+  (ensure (mapped-proper-pair-p #x0002)))
+
+(addtest (cl-sam-tests) query-unmapped-p/1
+  (ensure (query-unmapped-p #x0004)))
+
+(addtest (cl-sam-tests) mate-unmapped-p/1
+  (ensure (mate-unmapped-p #x0008)))
+
+(addtest (cl-sam-tests) query-forward-p/1
+  (ensure (query-forward-p #x0000))
+  (ensure (not (query-forward-p #x0010))))
+
+(addtest (cl-sam-tests) mate-forward-p/1
+  (ensure (mate-forward-p #x0000))
+  (ensure (not (mate-forward-p #x0020))))
+
+(addtest (cl-sam-tests) first-in-pair-p/1
+  (ensure (first-in-pair-p #x0040)))
+
+(addtest (cl-sam-tests) second-in-pair-p/1
+  (ensure (second-in-pair-p #x0080)))
+
+(addtest (cl-sam-tests) alignment-not-primary-p/1
+  (ensure (alignment-not-primary-p #x0100)))
+
+(addtest (cl-sam-tests) fails-platform-qc-p/1
+  (ensure (fails-platform-qc-p #x0200)))
+
+(addtest (cl-sam-tests) pcr/optical-duplicate-p/1
+  (ensure (pcr/optical-duplicate-p #x0400)))
+

@@ -44,6 +44,7 @@
    #:bgzf-open-p
    #:bgzf-open
    #:bgzf-close
+   #:with-bgzf-file
    
    ;; BGZF stream API
    #:bgzf-stream
@@ -57,7 +58,7 @@
    #:read-reference-meta
    #:read-alignment
 
-   ;; Low-level BAM parsing API
+   ;; Low-level BAM API
    #:reference-id
    #:alignment-position
    #:read-name-length
@@ -76,6 +77,19 @@
    #:qual-string
    #:alignment-tag-values
 
+   #:sequenced-pair-p
+   #:mapped-proper-pair-p
+   #:query-unmapped-p
+   #:mate-unmapped-p
+   #:query-forward-p
+   #:mate-forward-p
+   #:first-in-pair-p
+   #:second-in-pair-p
+   #:alignment-not-primary-p
+   #:fails-platform-qc-p
+   #:pcr/optical-duplicate-p
+   
    #:alignment-core
-   #:alignment-core-alist)
+   #:alignment-core-alist
+   #:alignment-flag-alist)
   (:documentation ""))

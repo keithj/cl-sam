@@ -22,6 +22,14 @@
   (ptr nil :type t)
   (open-p nil :type t))
 
+(defmacro with-bgzf-file ((var filespec &key direction) &body body)
+  `(let ((,var (bgzf-open ,filespec :direction ,direction)))
+    (unwind-protect
+         (progn
+           ,@body)
+      (when ,var
+        (bgzf-close ,var)))))
+
 (defun bgzf-open (filespec &key (direction :input))
   (let ((ptr (bgzf-ffi:bgzf-open (namestring filespec) (ecase direction
                                                          (:input "r")
