@@ -26,7 +26,7 @@
   (decode-int32le alignment-record 0))
 
 (defun alignment-position (alignment-record)
-  (decode-int32le alignment-record 4))
+  (1+ (decode-int32le alignment-record 4)))
 
 (defun read-name-length (alignment-record)
   (decode-uint8le alignment-record 8))
@@ -46,7 +46,7 @@
       (error 'dxi:malformed-field-error
              :record (alignment-core alignment-record :validate nil)
              :field flag
-             :text "pair-specific flags set for unpaired read"))
+             :text "pair-specific flags set for an unpaired read"))
     flag))
 
 (defun sequenced-pair-p (flag)
@@ -101,7 +101,7 @@
   (decode-int32le alignment-record 20))
 
 (defun mate-alignment-position (alignment-record)
-  (decode-int32le alignment-record 24))
+  (1+ (decode-int32le alignment-record 24)))
 
 (defun insert-length (alignment-record)
   (decode-int32le alignment-record 28))
