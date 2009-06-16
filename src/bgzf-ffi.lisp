@@ -39,10 +39,10 @@
   (data :pointer)
   (length :int))
 
-(defcfun ("bgzf_tell" bgzf-tell) :int
+(defcfun ("bgzf_tell" bgzf-tell) :int64
   (fp :pointer))
 
 (defcfun ("bgzf_seek" bgzf-seek) :int
   (fp :pointer)
-  (pos :int)
+  (pos :int64)
   (where :int))
