@@ -23,6 +23,17 @@
   (open-p nil :type t))
 
 (defmacro with-bgzf-file ((var filespec &key direction) &body body)
+  "Executes BODY with VAR bound to a BGZF handle structure created by
+opening the file denoted by FILESPEC.
+
+Arguments:
+
+- var (symbol): The symbol to be bound.
+- filespec (pathname designator): The file to open.
+
+Key:
+
+- direction (keyword): The direction, one of either :read or :write ."
   `(let ((,var (bgzf-open ,filespec :direction ,direction)))
     (unwind-protect
          (progn
@@ -31,6 +42,19 @@
         (bgzf-close ,var)))))
 
 (defun bgzf-open (filespec &key (direction :input))
+  "Opens a block gzip file for reading or writing.
+
+Arguments:
+
+- filespec (pathname designator): The file to open.
+
+Key:
+
+- direction (keyword): The direction, one of either :read or :write .
+
+Returns:
+
+- A BGZF structure."
   (let ((ptr (bgzf-ffi:bgzf-open (namestring filespec) (ecase direction
                                                          (:input "r")
                                                          (:output "w")))))
@@ -40,11 +64,47 @@
     (make-bgzf :file filespec :ptr ptr :open-p t)))
 
 (defun bgzf-close (bgzf)
+  "Closes an open block gzip handle.
+
+Arguments:
+
+- bgzf (bgzf structure): The handle to close.
+
+- Returns: T on success."
   (when (bgzf-open-p bgzf)
     (if (zerop (bgzf-ffi:bgzf-close (bgzf-ptr bgzf)))
         t
       (error 'bgzf-io-error :errno unix-ffi:*error-number*
              :text (format nil "failed to close ~a cleanly" bgzf)))))
+
+(defun bgzf-seek (bgzf position)
+  "Seeks with the file encapsulated by a block gzip handle.
+
+Arguments:
+
+- bgzf (bgzf structure): The handle to seek.
+- position (integer): The position to seek. Only values previously
+  returned by {defun bgzf-tell} may be used.
+
+- Returns: The new position."
+  (zerop
+   (bgzf-ffi:bgzf-seek (bgzf-ptr bgzf) position
+                       (foreign-enum-value'unix-ffi:seek-directive :seek-set))))
+
+(defun bgzf-tell (bgzf)
+  "Returns the current position in the encapsulated file of a block gzip
+handle.
+
+Arguments:
+
+- bgzf (bgzf structure): The handle.
+
+- Returns: The file position."
+  (let ((position (bgzf-ffi:bgzf-tell (bgzf-ptr bgzf))))
+    (when (minusp position)
+      (error 'bgzf-io-error :errno unix-ffi:*error-number*
+             :text (format nil "failed to find position in ~a" bgzf)))
+    position))
 
 (defun read-bytes (bgzf n)
   "Reads N bytes from the handle BGZF and returns them as a Lisp array
