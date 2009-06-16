@@ -27,6 +27,23 @@
       (read-sequence data stream)
       data)))
 
+(addtest (cl-sam-tests) bgzf-seek/tell/1
+  (with-bgzf-file (bgzf (namestring (merge-pathnames "data/c1215.bam"))
+                        :direction :input)
+    (ensure (bgzf-open-p bgzf) :report "expected an open handle")
+    (dotimes (n 1)
+      (let* ((x (random 4096))
+             (y (random 4096))
+             (bytes (sam::read-bytes bgzf x))
+             (pos (bgzf-tell bgzf)))
+        ;; Read further
+        (let ((more-bytes (sam::read-bytes bgzf y)))
+          ;; Seek back to where we were
+          (ensure (bgzf-seek bgzf pos))
+          ;; Read those bytes again
+          (ensure (= pos (bgzf-tell bgzf)))
+          (ensure (equalp more-bytes (sam::read-bytes bgzf y))))))))
+
 (addtest (cl-sam-tests) bam-open/close/1
   (let* ((filespec (namestring (merge-pathnames "data/c1215.bam")))
          (bgzf (bgzf-open filespec)))
