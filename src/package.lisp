@@ -44,6 +44,8 @@
    #:bgzf-open-p
    #:bgzf-open
    #:bgzf-close
+   #:bgzf-seek
+   #:bgzf-tell
    #:with-bgzf-file
    
    ;; BGZF stream API
