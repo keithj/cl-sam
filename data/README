@@ -1,0 +1,21 @@
+c1215.fasta:
+S. pombe example cosmid
+
+c1215_reads_1.fastq:
+Simulated forward reads from c1215.fasta
+
+c1215_reads_2.fastq:
+Simulated reverse reads from c1215.fasta
+
+c1215.sam:
+Simulated reads c1215_reads_1.fastq and c1215_reads_2.fastq, aligned
+to c1215.fasta with BWA
+
+c1215.bam:
+Binary version of c1215.sam
+
+c1215.dat:
+Uncompressed version of c1215.bam
+
+c1215_fixmate.bam:
+c1215.bam processed with samtools fixmate
