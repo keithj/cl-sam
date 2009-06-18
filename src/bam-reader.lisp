@@ -58,3 +58,18 @@ alignment. If no more alignments are available, returns NIL."
         nil
       (let ((block-size (decode-int32le size-bytes)))
         (read-bytes bgzf block-size)))))
+
+(defun read-bam-meta (bgzf)
+  "Reads all BAM metadata from handle BGZF, leaving the handle
+pointing at the first alignment record. Returns the header string, the
+number of references and a list of reference sequence metadata. The
+list contains one element per reference sequence, each element being a
+list of reference identifier, reference name and reference length."
+  (read-bam-magic bgzf)
+  (let ((header (read-bam-header bgzf))
+        (num-refs (read-num-references bgzf)))
+    (values header num-refs
+            (loop
+               for ref-id from 0 below num-refs
+               collect (cons ref-id (multiple-value-list
+                                     (read-reference-meta bgzf)))))))

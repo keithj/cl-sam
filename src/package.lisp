@@ -59,7 +59,8 @@
    #:read-num-references
    #:read-reference-meta
    #:read-alignment
-
+   #:read-bam-meta
+   
    ;; Low-level BAM API
    #:reference-id
    #:alignment-position
@@ -93,5 +94,8 @@
    
    #:alignment-core
    #:alignment-core-alist
-   #:alignment-flag-alist)
+   #:alignment-flag-alist
+
+   ;; Pileup parser
+   #:read-pileup-record)
   (:documentation ""))

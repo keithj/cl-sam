@@ -183,4 +183,3 @@
 
 (addtest (cl-sam-tests) pcr/optical-duplicate-p/1
   (ensure (pcr/optical-duplicate-p #x0400)))
-
