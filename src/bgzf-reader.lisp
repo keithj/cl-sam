@@ -22,7 +22,7 @@
   (ptr nil :type t)
   (open-p nil :type t))
 
-(defmacro with-bgzf-file ((var filespec &key direction) &body body)
+(defmacro with-bgzf-file ((var filespec &key (direction :input)) &body body)
   "Executes BODY with VAR bound to a BGZF handle structure created by
 opening the file denoted by FILESPEC.
 
