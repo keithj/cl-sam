@@ -85,11 +85,11 @@
 (defun valid-flag-p (flag)
   (if (not (sequenced-pair-p flag))
       ;; If unpaired, the pair data bits should not be set
-      (and (not (mapped-proper-pair-p flag))
-           (not (mate-unmapped-p flag))
-           (not (mate-forward-p flag))
-           (not (first-in-pair-p flag))
-           (not (second-in-pair-p flag)))
+      (not (or (mapped-proper-pair-p flag)
+               (mate-unmapped-p flag)
+               (mate-forward-p flag)
+               (first-in-pair-p flag)
+               (second-in-pair-p flag)))
     ;; If paired, must be a proper pair
     (or (and (first-in-pair-p flag) (not (second-in-pair-p flag)))
         (and (second-in-pair-p flag) (not (first-in-pair-p flag))))))
