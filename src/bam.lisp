@@ -23,33 +23,54 @@
   "The size of a BAM auxilliary tag in bytes.")
 
 (defun reference-id (alignment-record)
+  "Returns the reference sequence identifier of ALIGNMENT-RECORD. This
+is an integer locally assigned to a reference sequence within the
+context of a BAM file."
   (decode-int32le alignment-record 0))
 
 (defun alignment-position (alignment-record)
+  "Returns the 1-based sequence coordinate of ALIGNMENT-RECORD in the
+reference sequence of the first base of the clipped read."
   (1+ (decode-int32le alignment-record 4)))
 
 (defun read-name-length (alignment-record)
+  "Returns the length in ASCII characters of the read name of
+ALIGNMENT-RECORD."
   (decode-uint8le alignment-record 8))
 
 (defun mapping-quality (alignment-record)
+  "Returns the integer mapping quality of ALIGNMENT-RECORD."
   (decode-uint8le alignment-record 9))
 
 (defun alignment-bin (alignment-record)
+  "Returns an integer that indicates the alignment bin to which
+ALIGNMENT-RECORD has been assigned."
   (decode-uint16le alignment-record 10))
 
 (defun cigar-length (alignment-record)
+  "Returns the number of CIGAR operations in ALIGNMENT-RECORD."
   (decode-uint16le alignment-record 12))
 
 (defun alignment-flag (alignment-record &key (validate t))
+  "Returns an integer whose bits are flags that describe properties of
+the ALIGNMENT-RECORD. If the VALIDATE key is T (the default) the
+flag's bits are checked for internal consistency."
   (let ((flag (decode-uint16le alignment-record 14)))
     (when (and validate (not (valid-flag-p flag)))
       (error 'dxi:malformed-field-error
              :record (alignment-core alignment-record :validate nil)
              :field flag
-             :text "pair-specific flags set for an unpaired read"))
+             :text (format nil (txt "pair-specific flag ~b"
+                                    "set for an unpaired read ~s at ~a"
+                                    "in reference ~d")
+                           flag (read-name alignment-record)
+                           (alignment-position alignment-record)
+                           (reference-id alignment-record))))
     flag))
 
 (defun sequenced-pair-p (flag)
+  "Returns T if FLAG indicates that the read was sequenced as a member
+of a pair, or NIL otherwise."
   (logbitp 0 flag))
 
 (defun mapped-proper-pair-p (flag)
@@ -87,7 +108,6 @@
       ;; If unpaired, the pair data bits should not be set
       (not (or (mapped-proper-pair-p flag)
                (mate-unmapped-p flag)
-               (mate-forward-p flag)
                (first-in-pair-p flag)
                (second-in-pair-p flag)))
     ;; If paired, must be a proper pair
