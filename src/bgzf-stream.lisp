@@ -1,6 +1,8 @@
 ;;;
 ;;; Copyright (C) 2009 Genome Research Ltd. All rights reserved.
 ;;;
+;;; This file is part of cl-sam.
+;;;
 ;;; This program is free software: you can redistribute it and/or modify
 ;;; it under the terms of the GNU General Public License as published by
 ;;; the Free Software Foundation, either version 3 of the License, or
@@ -69,14 +71,14 @@ the next byte is to be read."))
     (unwind-protect 
          (if (bgzf-close (bgzf-of stream))
              t
-           (error 'bgzf-io-error :errno unix-ffi:*error-number*
+           (error 'bgzf-io-error :errno unix-ffi:*c-error-number*
                   :text "failed to close file cleanly"))
       (call-next-method))))
 
 (defmethod stream-file-position ((stream bgzf-input-stream))
   (let ((position (bgzf-ffi:bgzf-tell (bgzf-of stream))))
     (when (minusp position)
-      (error 'bgzf-io-error :errno unix-ffi:*error-number*
+      (error 'bgzf-io-error :errno unix-ffi:*c-error-number*
              :text "failed to find position in file"))
     (- position (num-bytes-buffered stream))))
 
@@ -84,7 +86,7 @@ the next byte is to be read."))
   (when (minusp (bgzf-ffi:bgzf-seek (bgzf-ptr (bgzf-of stream)) position
                                     (foreign-enum-value
                                      'unix-ffi:seek-directive :seek-set)))
-    (error 'bgzf-io-error :errno unix-ffi:*error-number*
+    (error 'bgzf-io-error :errno unix-ffi:*c-error-number*
            :text "failed to seek in file"))
   (setf (offset-of stream) 0
         (num-bytes-of stream) 0)

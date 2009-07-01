@@ -1,6 +1,8 @@
 ;;;
 ;;; Copyright (C) 2009 Keith James. All rights reserved.
 ;;;
+;;; This file is part of cl-sam.
+;;;
 ;;; This program is free software: you can redistribute it and/or modify
 ;;; it under the terms of the GNU General Public License as published by
 ;;; the Free Software Foundation, either version 3 of the License, or
@@ -59,7 +61,7 @@ Returns:
                                                          (:input "r")
                                                          (:output "w")))))
     (when (null-pointer-p ptr)
-      (error 'bgzf-io-error :errno unix-ffi:*error-number*
+      (error 'bgzf-io-error :errno unix-ffi:*c-error-number*
              :text (format nil "failed to open ~a" filespec)))
     (make-bgzf :file filespec :ptr ptr :open-p t)))
 
@@ -74,7 +76,7 @@ Arguments:
   (when (bgzf-open-p bgzf)
     (if (zerop (bgzf-ffi:bgzf-close (bgzf-ptr bgzf)))
         t
-      (error 'bgzf-io-error :errno unix-ffi:*error-number*
+      (error 'bgzf-io-error :errno unix-ffi:*c-error-number*
              :text (format nil "failed to close ~a cleanly" bgzf)))))
 
 (defun bgzf-seek (bgzf position)
@@ -89,7 +91,8 @@ Arguments:
 - Returns: The new position."
   (zerop
    (bgzf-ffi:bgzf-seek (bgzf-ptr bgzf) position
-                       (foreign-enum-value'unix-ffi:seek-directive :seek-set))))
+                       (foreign-enum-value
+                        'unix-ffi:seek-directive :seek-set))))
 
 (defun bgzf-tell (bgzf)
   "Returns the current position in the encapsulated file of a block gzip
@@ -102,7 +105,7 @@ Arguments:
 - Returns: The file position."
   (let ((position (bgzf-ffi:bgzf-tell (bgzf-ptr bgzf))))
     (when (minusp position)
-      (error 'bgzf-io-error :errno unix-ffi:*error-number*
+      (error 'bgzf-io-error :errno unix-ffi:*c-error-number*
              :text (format nil "failed to find position in ~a" bgzf)))
     position))
 

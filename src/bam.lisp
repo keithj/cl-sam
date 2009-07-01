@@ -1,6 +1,8 @@
 ;;;
 ;;; Copyright (C) 2009 Keith James. All rights reserved.
 ;;;
+;;; This file is part of cl-sam.
+;;;
 ;;; This program is free software: you can redistribute it and/or modify
 ;;; it under the terms of the GNU General Public License as published by
 ;;; the Free Software Foundation, either version 3 of the License, or
@@ -74,36 +76,58 @@ of a pair, or NIL otherwise."
   (logbitp 0 flag))
 
 (defun mapped-proper-pair-p (flag)
+  "Returns T if FLAG indicates that the read was mapped as a member of
+a properly oriented read-pair, or NIL otherwise."
   (logbitp 1 flag))
 
 (defun query-unmapped-p (flag)
+  "Returns T if FLAG indicates that the read was not mapped to a
+reference, or NIL otherwise."
   (logbitp 2 flag))
 
 (defun mate-unmapped-p (flag)
+  "Returns T if FLAG indicates that the read's mate was not mapped to
+a reference, or NIL otherwise."
   (logbitp 3 flag))
 
 (defun query-forward-p (flag)
+  "Returns T if FLAG indicates that the read was mapped to the forward
+strand of a reference, or NIL if it was mapped to the reverse strand."
   (not (logbitp 4 flag)))
 
 (defun mate-forward-p (flag)
+  "Returns T if FLAG indicates that the read's mate was mapped to the
+forward, or NIL if it was mapped to the reverse strand."
   (not (logbitp 5 flag)))
 
 (defun first-in-pair-p (flag)
+  "Returns T if FLAG indicates that the read was the first in a pair
+of reads from one template, or NIL otherwise."
   (logbitp 6 flag))
 
 (defun second-in-pair-p (flag)
+  "Returns T if FLAG indicates that the read was the second in a pair
+of reads from one template, or NIL otherwise."
   (logbitp 7 flag))
 
 (defun alignment-not-primary-p (flag)
+  "Returns T if FLAG indicates that the read mapping was not the
+primary mapping to a reference, or NIL otherwise."
   (logbitp 8 flag))
 
 (defun fails-platform-qc-p (flag)
+  "Returns T if FLAG indicates that the read failed plaform quality
+control, or NIL otherwise."
   (logbitp 9 flag))
 
 (defun pcr/optical-duplicate-p (flag)
+  "Returns T if FLAG indicates that the read is a PCR or optical
+duplicate, or NIL otherwise."
   (logbitp 10 flag))
 
 (defun valid-flag-p (flag)
+  "Returns T if the paired-read-specific bits of FLAG are internally
+consistent."
   (if (not (sequenced-pair-p flag))
       ;; If unpaired, the pair data bits should not be set
       (not (or (mapped-proper-pair-p flag)
@@ -115,27 +139,38 @@ of a pair, or NIL otherwise."
         (and (second-in-pair-p flag) (not (first-in-pair-p flag))))))
 
 (defun read-length (alignment-record)
+  "Returns the length of the read described by ALIGNMENT-RECORD."
   (decode-int32le alignment-record 16))
 
 (defun mate-reference-id (alignment-record)
+  "Returns the integer reference ID of ALIGNMENT-RECORD."
   (decode-int32le alignment-record 20))
 
 (defun mate-alignment-position (alignment-record)
+  "Returns the 1-based sequence position of the read mate's alignment
+described by ALIGNMENT-RECORD."
   (1+ (decode-int32le alignment-record 24)))
 
 (defun insert-length (alignment-record)
+  "Returns the insert length described by ALIGNMENT-RECORD."
   (decode-int32le alignment-record 28))
 
 (defun read-name (alignment-record)
+  "Returns the read name string described by ALIGNMENT-RECORD."
   (decode-read-name alignment-record (read-name-length alignment-record)))
 
 (defun alignment-cigar (alignment-record)
+  "Returns the CIGAR record list of the alignment described by
+ALIGNMENT-RECORD. CIGAR operations are given as a list, each member
+being a list of a CIGAR operation keyword and an integer operation
+length."
   (let* ((name-len (read-name-length alignment-record))
          (cigar-index (+ 32 name-len))
          (cigar-bytes (* 4 (cigar-length alignment-record))))
     (decode-cigar alignment-record cigar-index cigar-bytes)))
 
 (defun seq-string (alignment-record)
+  "Returns the sequence string described by ALIGNMENT-RECORD."
   (multiple-value-bind (read-len cigar-index cigar-bytes seq-index
                         seq-bytes qual-index tag-index)
       (alignment-indices alignment-record)
@@ -143,6 +178,7 @@ of a pair, or NIL otherwise."
     (decode-seq-string alignment-record seq-index read-len)))
 
 (defun qual-string (alignment-record)
+  "Returns the sequence quality string described by ALIGNMENT-RECORD."
   (multiple-value-bind (read-len cigar-index cigar-bytes seq-index
                         seq-bytes qual-index tag-index)
       (alignment-indices alignment-record)
@@ -150,6 +186,7 @@ of a pair, or NIL otherwise."
     (decode-qual-string alignment-record qual-index read-len)))
 
 (defun alignment-tag-values (alignment-record)
+  "Returns an alist of tag and values described by ALIGNMENT-RECORD."
   (multiple-value-bind (read-len cigar-index cigar-bytes seq-index
                         seq-bytes qual-index tag-index)
       (alignment-indices alignment-record)
@@ -158,6 +195,11 @@ of a pair, or NIL otherwise."
     (decode-tag-values alignment-record tag-index)))
 
 (defun alignment-core (alignment-record &key (validate t))
+  "Returns a list of the core data described by ALIGNMENT-RECORD. The
+list elements are comprised of reference-id, alignment-position,
+read-name length, mapping-quality alignment-bin, cigar length,
+alignment flag, read length, mate reference-id, mate
+alignment-position and insert length."
   (list (reference-id alignment-record)
         (alignment-position alignment-record)
         (read-name-length alignment-record)
@@ -171,6 +213,8 @@ of a pair, or NIL otherwise."
         (insert-length alignment-record)))
 
 (defun alignment-core-alist (alignment-record &key (validate t))
+  "Returns the same data as {defun alignment-core} in the form of an
+alist."
   (pairlis '(:reference-id :alignment-pos :read-name-length
              :mapping-quality :alignment-bin :cigar-length
              :alignment-flag :read-length :mate-reference-id
