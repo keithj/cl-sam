@@ -177,13 +177,13 @@ length."
     (declare (ignore cigar-index cigar-bytes seq-bytes qual-index tag-index))
     (decode-seq-string alignment-record seq-index read-len)))
 
-(defun qual-string (alignment-record)
+(defun quality-string (alignment-record)
   "Returns the sequence quality string described by ALIGNMENT-RECORD."
   (multiple-value-bind (read-len cigar-index cigar-bytes seq-index
                         seq-bytes qual-index tag-index)
       (alignment-indices alignment-record)
     (declare (ignore cigar-index cigar-bytes seq-bytes seq-index tag-index))
-    (decode-qual-string alignment-record qual-index read-len)))
+    (decode-quality-string alignment-record qual-index read-len)))
 
 (defun alignment-tag-values (alignment-record)
   "Returns an alist of tag and values described by ALIGNMENT-RECORD."
@@ -282,7 +282,7 @@ READ-LEN. The sequence must be present in ALIGNMENT-RECORD at INDEX."
                                (ldb (byte 4 0) (aref alignment-record j)))))
        finally (return seq))))
 
-(defun decode-qual-string (alignment-record index read-len)
+(defun decode-quality-string (alignment-record index read-len)
   "Returns a string containing the alignment query sequence of length
 READ-LEN. The sequence must be present in ALIGNMENT-RECORD at
 INDEX. The SAM spec states that quality data are optional, with
@@ -322,7 +322,7 @@ NIL is returned."
 (defun decode-tag-values (alignment-record index)
   "Returns an alist of auxilliary data from ALIGNMENT-RECORD at
 INDEX. The BAM two-letter data keys are transformed to Lisp keywords."
-  (declare (optimize (speed 3)))
+  (declare (optimize (speed 3) (safety 0)))
   (declare (type (simple-array (unsigned-byte 8)) alignment-record)
            (type fixnum index))
   (loop
@@ -330,37 +330,38 @@ INDEX. The BAM two-letter data keys are transformed to Lisp keywords."
      while (< tag-index (length alignment-record))
      collect (let* ((type-index (+ tag-index +tag-size+))
                     (type-code (code-char (aref alignment-record type-index)))
-                    (val-index (1+ type-index))
                     (tag (make-sb-string alignment-record tag-index
                                          (1+ tag-index)))
-                    (val (ecase type-code
-                           (#\A         ; A printable character
-                            (setf tag-index (+ val-index 1))
-                            (code-char (aref alignment-record val-index)))
-                           (#\C         ; C unsigned 8-bit integer
-                            (setf tag-index (+ val-index 1))
-                            (decode-uint8le alignment-record val-index))
-                           ((#\H #\Z) ; H hex string, Z printable string
-                            (let ((end (position +null-byte+ alignment-record
-                                                 :start val-index)))
-                              (setf tag-index (1+ end))
-                              (make-sb-string alignment-record val-index
-                                              (1- end))))
-                           (#\I         ; I unsigned 32-bit integer
-                            (setf tag-index (+ val-index 4))
-                            (decode-uint32le alignment-record val-index))
-                           (#\S         ; S unsigned short
-                            (setf tag-index (+ val-index 2))
-                            (decode-int16le alignment-record val-index))
-                           (#\c         ; c signed 8-bit integer
-                            (setf tag-index (+ val-index 1))
-                            (decode-int8le alignment-record val-index))
-                           (#\f         ; f single-precision float
-                            (decode-float32le alignment-record val-index))
-                           (#\i         ; i signed 32-bit integer
-                            (setf tag-index (+ val-index 4))
-                            (decode-int32le alignment-record val-index))
-                           (#\s         ; s signed short
-                            (setf tag-index (+ val-index 2))
-                            (decode-int16le alignment-record val-index)))))
-               (list tag val))))
+                    (val-index (1+ type-index)))
+               (declare (type fixnum val-index))
+               (let  ((val (ecase type-code
+                             (#\A         ; A printable character
+                              (setf tag-index (+ val-index 1))
+                              (code-char (aref alignment-record val-index)))
+                             (#\C         ; C unsigned 8-bit integer
+                              (setf tag-index (+ val-index 1))
+                              (decode-uint8le alignment-record val-index))
+                             ((#\H #\Z) ; H hex string, Z printable string
+                              (let ((end (position +null-byte+ alignment-record
+                                                   :start val-index)))
+                                (setf tag-index (1+ end))
+                                (make-sb-string alignment-record val-index
+                                                (1- end))))
+                             (#\I         ; I unsigned 32-bit integer
+                              (setf tag-index (+ val-index 4))
+                              (decode-uint32le alignment-record val-index))
+                             (#\S         ; S unsigned short
+                              (setf tag-index (+ val-index 2))
+                              (decode-int16le alignment-record val-index))
+                             (#\c         ; c signed 8-bit integer
+                              (setf tag-index (+ val-index 1))
+                              (decode-int8le alignment-record val-index))
+                             (#\f         ; f single-precision float
+                              (decode-float32le alignment-record val-index))
+                             (#\i         ; i signed 32-bit integer
+                              (setf tag-index (+ val-index 4))
+                              (decode-int32le alignment-record val-index))
+                             (#\s         ; s signed short
+                              (setf tag-index (+ val-index 2))
+                              (decode-int16le alignment-record val-index)))))
+                 (list tag val)))))

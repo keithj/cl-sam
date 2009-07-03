@@ -43,6 +43,7 @@
                            (:file "bgzf-stream")
                            (:file "bam-reader")
                            (:file "bam")
+                           (:file "sam")
                            (:file "pileup-parser")))
      (:lift-test-config :lift-tests
                         :pathname "cl-sam-test.config"

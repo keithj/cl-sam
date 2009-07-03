@@ -19,10 +19,10 @@
 
 (in-package :bgzf-ffi)
 
-(define-foreign-library libbgz
+(define-foreign-library libbgzf
   (t (:default "libbgzf")))
 
-(use-foreign-library libbgz)
+(use-foreign-library libbgzf)
 
 (defcfun ("bgzf_open" bgzf-open) :pointer
   (path :string)
@@ -31,6 +31,7 @@
 (defcfun ("bgzf_close" bgzf-close) :int
   (fp :pointer))
 
+;; (declaim (inline bgzf-read))
 (defcfun ("bgzf_read" bgzf-read) :int
   (fp :pointer)
   (data :pointer)

@@ -79,7 +79,7 @@
    #:read-name
    #:alignment-cigar
    #:seq-string
-   #:qual-string
+   #:quality-string
    #:alignment-tag-values
 
    #:sequenced-pair-p

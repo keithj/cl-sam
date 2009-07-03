@@ -72,7 +72,9 @@ Arguments:
 
 - bgzf (bgzf structure): The handle to close.
 
-- Returns: T on success."
+Returns:
+
+- T on success."
   (when (bgzf-open-p bgzf)
     (if (zerop (bgzf-ffi:bgzf-close (bgzf-ptr bgzf)))
         t
@@ -88,7 +90,9 @@ Arguments:
 - position (integer): The position to seek. Only values previously
   returned by {defun bgzf-tell} may be used.
 
-- Returns: The new position."
+Returns:
+
+- The new position."
   (zerop
    (bgzf-ffi:bgzf-seek (bgzf-ptr bgzf) position
                        (foreign-enum-value
@@ -102,7 +106,9 @@ Arguments:
 
 - bgzf (bgzf structure): The handle.
 
-- Returns: The file position."
+Returns:
+
+- The file position."
   (let ((position (bgzf-ffi:bgzf-tell (bgzf-ptr bgzf))))
     (when (minusp position)
       (error 'bgzf-io-error :errno unix-ffi:*c-error-number*
