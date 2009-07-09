@@ -17,34 +17,7 @@
 ;;; along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ;;;
 
-(in-package :bgzf-ffi)
+(in-package :sam)
 
-(define-foreign-library libbgzf
-  (t (:default "libbgzf")))
-
-(use-foreign-library libbgzf)
-
-(defcfun ("bgzf_open" bgzf-open) :pointer
-  (path :string)
-  (mode :string))
-
-(defcfun ("bgzf_close" bgzf-close) :int
-  (fp :pointer))
-
-(defcfun ("bgzf_read" bgzf-read) :int
-  (fp :pointer)
-  (data :pointer)
-  (length :int))
-
-(defcfun ("bgzf_write" bgzf-write) :int
-  (fp :pointer)
-  (data :pointer)
-  (length :int))
-
-(defcfun ("bgzf_tell" bgzf-tell) :int64
-  (fp :pointer))
-
-(defcfun ("bgzf_seek" bgzf-seek) :int
-  (fp :pointer)
-  (pos unix-ffi:off-t)
-  (where :int))
+;;; This space intentionally blank. SAMtools has provided all my
+;;; SAM-reading needs so far.

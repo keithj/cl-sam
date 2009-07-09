@@ -35,7 +35,6 @@
   (:use #:common-lisp #:cffi #:trivial-gray-streams
         #:deoxybyte-utilities #:deoxybyte-io)
   (:export
-
    ;; Conditions
    #:bgzf-io-error
 
@@ -96,8 +95,57 @@
    
    #:alignment-core
    #:alignment-core-alist
-   #:alignment-flag-alist
+   #:alignment-flag-alist)
+  (:documentation "cl-sam is a Common Lisp toolkit for manipulation of
+DNA sequence alignment data stored in the Sequence Alignment/Map (SAM)
+format <http://samtools.sourceforge.net>. It is meant to be used in
+conjunction with the SAMtools C toolkit.
 
-   ;; Pileup parser
-   #:read-pileup-record)
-  (:documentation ""))
+The SAM specficiation describes text (SAM) and binary (BAM)
+formats. cl-sam originated as a small set of functions for exploring
+example BAM files and therefore provides only a subset of possible
+SAM/BAM read/write operations.
+
+The following example implements something similar to samtools
+flagstat:
+
+;;; (with-bgzf-file (bgzf \"example.bam\" :direction :input)
+;;;   (multiple-value-bind (header num-refs ref-meta)
+;;;       (read-bam-meta bgzf)
+;;;     (format t \"BAM header: ~s~%\" header)
+;;;     (format t \"Number of references: ~d~%\" num-refs)
+;;;     (loop
+;;;        for (id name length) in ref-meta
+;;;        do (format t \"Reference name: ~s Length: ~d~%\" id name length)))
+;;;   (loop
+;;;      for alignment = (read-alignment bgzf)
+;;;      while alignment
+;;;      for flag = (alignment-flag alignment)
+;;;      count flag into total
+;;;      count (fails-platform-qc-p flag) into qc-fail
+;;;      count (pcr/optical-duplicate-p flag) into duplicates
+;;;      count (not (query-unmapped-p flag)) into mapped
+;;;      count (sequenced-pair-p flag) into seq-paired
+;;;      count (first-in-pair-p flag) into read1
+;;;      count (second-in-pair-p flag) into read2
+;;;      count (mapped-proper-pair-p flag) into proper-paired
+;;;      count (and (not (query-unmapped-p flag))
+;;;                 (not (mate-unmapped-p flag))) into both-mapped
+;;;      count (mate-unmapped-p flag) into singletons
+;;;      finally (format t (str \"~d in total~%\"
+;;;                             \"~d QC failure~%\"
+;;;                             \"~d duplicates~%\"
+;;;                             \"~d mapped (~$%)~%\"
+;;;                             \"~d paired in sequencing~%\"
+;;;                             \"~d read1~%\"
+;;;                             \"~d read2~%\"
+;;;                             \"~d properly paired (~$%)~%\"
+;;;                             \"~d both mapped~%\"
+;;;                             \"~d singletons (~$%)~%\")
+;;;                      total qc-fail duplicates mapped
+;;;                      (* 100 (/ mapped total))
+;;;                      seq-paired read1 read2 proper-paired
+;;;                      (* 100 (/ proper-paired total))
+;;;                      both-mapped singletons
+;;;                      (* 100 (/ singletons total)))))"))
+

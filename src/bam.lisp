@@ -222,6 +222,8 @@ alist."
            (alignment-core alignment-record :validate validate)))
 
 (defun alignment-flag-alist (alignment-record &key (validate t))
+  "Returns the bitwise flags of ALIGNMENT-RECORD in the form of an
+alist. The primary purpose of this function is debugging."
   (let ((flag (alignment-flag alignment-record :validate validate)))
     (pairlis '(:sequenced-pair :mapped-proper-pair :query-unmapped
                :mate-unmapped :query-forward :mate-forward :first-in-pair
@@ -240,6 +242,9 @@ alist."
                    (pcr/optical-duplicate-p flag)))))
 
 (defun alignment-indices (alignment-record)
+  "Returns 7 integer values which are byte-offsets within
+ALIGNMENT-RECORD at which the various core data lie. See the SAM
+spec."
   (let* ((read-len (read-length alignment-record))
          (name-len (read-name-length alignment-record))
          (cigar-index (+ 32 name-len))

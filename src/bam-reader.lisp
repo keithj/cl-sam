@@ -1,6 +1,8 @@
 ;;;
 ;;; Copyright (C) 2009 Keith James. All rights reserved.
 ;;;
+;;; This file is part of cl-sam.
+;;;
 ;;; This program is free software: you can redistribute it and/or modify
 ;;; it under the terms of the GNU General Public License as published by
 ;;; the Free Software Foundation, either version 3 of the License, or
@@ -53,6 +55,7 @@ an integer,"
   "Reads one alignment block from handle BGZF, returns it as a Lisp
 array of unsigned-byte 8. The handle is advanced to the next
 alignment. If no more alignments are available, returns NIL."
+  (declare (optimize (speed 3)))
   (let ((size-bytes (read-bytes bgzf 4)))
     (if (null size-bytes)
         nil

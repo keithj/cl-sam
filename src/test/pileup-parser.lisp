@@ -17,8 +17,9 @@
 ;;; along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ;;;
 
-(in-package :sam)
+(in-package :sam-test)
 
+;; This is used to parse SAMtools pileup output as part of testing.
 (define-line-parser parse-pileup-record #\Tab
   ((:reference-name :type :string)
    (:reference-position :type :integer)

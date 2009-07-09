@@ -20,6 +20,13 @@
 (in-package :sam)
 
 (defstruct bgzf
+  "A BGZF (block gzip file) handle.
+
+- file: The name of a block gzippped file.
+- ptr: A foreign pointer to a BGZF struct.
+- open-p: A flag indicating that while T indicates that the foreign
+  pointer may be freed.
+"
   (file nil :type t)
   (ptr nil :type t)
   (open-p nil :type t))
@@ -119,7 +126,7 @@ Returns:
   "Reads N bytes from the handle BGZF and returns them as a Lisp array
 of unsigned-byte 8. If fewer than N bytes are available an a
 {define-condition bgzf-read-error} is raised."
-  (declare (optimize (speed 3)))
+  (declare (optimize (speed 3) (safety 0)))
   (declare (type fixnum n))
   (with-foreign-object (array-ptr :unsigned-char n)
     (let ((num-read (bgzf-ffi:bgzf-read (bgzf-ptr bgzf) array-ptr n)))

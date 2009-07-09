@@ -15,7 +15,8 @@
 ;;; along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ;;;
 
-(defpackage :cl-sam-test
-  (:use #:common-lisp #:sam #:trivial-gray-streams #:lift)
+(defpackage :sam-test
+  (:use #:common-lisp #:sam #:trivial-gray-streams #:lift
+        #:deoxybyte-io)
   (:documentation "SAM/BAM alignment format tests.")
   (:export #:cl-sam-tests))

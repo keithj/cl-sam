@@ -1,6 +1,8 @@
 ;;;
 ;;; Copyright (C) 2009 Keith James. All rights reserved.
 ;;;
+;;; This file is part of cl-sam.
+;;;
 ;;; This program is free software: you can redistribute it and/or modify
 ;;; it under the terms of the GNU General Public License as published by
 ;;; the Free Software Foundation, either version 3 of the License, or
@@ -15,7 +17,7 @@
 ;;; along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ;;;
 
-(in-package :cl-sam-test)
+(in-package :sam-test)
 
 (deftestsuite cl-sam-tests ()
   ())
@@ -127,10 +129,8 @@
         (found (with-bgzf-file (bgzf (namestring (merge-pathnames
                                                   "data/c1215_fixmate.bam"))
                                      :direction :input)
-                 (read-bam-magic bgzf)
-                 (read-bam-header bgzf)
-                 (read-num-references bgzf)
-                 (read-reference-meta bgzf)
+                 (multiple-value-bind (header num-refs ref-meta)
+                     (read-bam-meta bgzf))
                  (loop
                     repeat 10
                     for alignment = (read-alignment bgzf)
