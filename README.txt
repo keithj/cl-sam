@@ -20,6 +20,31 @@ BAM read performance is roughly 0.5x the speed of SAMtools C
 implementation (SBCL 1.0.29.54 X86_64).
 
 
+Installation
+
+cl-sam uses ASDF for system definition. Copy or symlink cl-sam.asd
+(and optionally cl-sam-test.asd) to your asdf:*central-registry* and
+load cl-sam with the asdf:operate function:
+
+ (asdf:operate 'asdf:load-op :cl-sam)
+
+or with the equivalent deoxybyte-systems:load-system function:
+
+ (dxs:load-system :cl-sam)
+
+
+Tests
+
+To run the unit and regression tests you need to have LIFT
+installed. Run the tests with the asdf:operate function:
+
+ (asdf:operate 'asdf:test-op :cl-sam)
+
+or with the equivalent deoxybyte-systems:test-system function:
+
+ (dxs:test-system :cl-sam)
+
+
 Documentation
 
 See the Lisp docstrings, particularly the package docstrings for an
@@ -57,3 +82,9 @@ SAMtools                http://samtools.sourceforge.net
 cl-sam requires a C shared library for block-gzip file reading. This
 is created from the SAMtools C source using the makefile provided in
 the bgzf directory of cl-sam.
+
+
+Optional dependencies
+
+LIFT                    http://common-lisp.net/project/lift/
+CLDOC                   http://common-lisp.net/project/cldoc/
