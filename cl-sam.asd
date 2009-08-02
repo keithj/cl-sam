@@ -44,8 +44,11 @@
                            (:file "conditions")
                            (:file "bgzf-ffi")
                            (:file "bgzf-reader")
+                           (:file "bgzf-writer")
                            (:file "bgzf-stream")
                            (:file "bam-reader")
+                           (:file "bam-writer")
+                           (:file "sam-writer")
                            (:file "bam")
                            (:file "sam")))
      (:lift-test-config :lift-tests

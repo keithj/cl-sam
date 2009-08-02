@@ -21,6 +21,8 @@
 
 (defconstant +bam-magic+ #(66 65 77 1)
   "The BAM file magic header bytes.")
+(defconstant +null-byte+ #x00
+  "The termination byte for BAM strings.")
 
 (defun read-bam-magic (bgzf)
   "Reads the BAM magic number from the handle BGZF and returns T if it

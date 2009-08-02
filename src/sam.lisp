@@ -114,10 +114,3 @@ raise a {define-condition malformed-record-error} or
            (error 'malformed-record-error
                   :record str
                   :text "invalid SAM header record")))))
-
-(defun sam-header (str)
-  (with-input-from-string (s str)
-    (loop
-       for rec = (read-line s nil nil)
-       while rec
-       collect (parse-header-record rec))))

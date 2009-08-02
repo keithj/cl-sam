@@ -19,10 +19,25 @@
 
 (in-package :sam)
 
-(defconstant +null-byte+ #x00
-  "The termination byte for BAM strings.")
 (defconstant +tag-size+ 2
   "The size of a BAM auxilliary tag in bytes.")
+
+(defun header-alist (header)
+  "Returns an alist containing the data in string HEADER as Lisp
+objects."
+  (with-input-from-string (s header)
+    (loop
+       for rec = (read-line s nil nil)
+       while rec
+       collect (parse-header-record rec))))
+
+(defun alist-header (alist)
+  "Returns a new SAM header string representing the header data in
+ALIST."
+ (with-output-to-string (s)
+   (loop
+      for rec in alist
+      do (write-header-record rec s))))
 
 (defun reference-id (alignment-record)
   "Returns the reference sequence identifier of ALIGNMENT-RECORD. This
@@ -34,6 +49,18 @@ context of a BAM file."
   "Returns the 1-based sequence coordinate of ALIGNMENT-RECORD in the
 reference sequence of the first base of the clipped read."
   (1+ (decode-int32le alignment-record 4)))
+
+(defun alignment-read-length (alignment-record)
+  "Returns the length of the alignment on the read."
+  (loop
+     for (op len) in (alignment-cigar alignment-record)
+     when (member op '(:i :m :s)) sum len))
+
+(defun alignment-reference-length (alignment-record)
+  "Returns the length of the alignment on the reference."
+  (loop
+     for (op len) in (alignment-cigar alignment-record)
+     when (member op '(:d :m :n)) sum len))
 
 (defun read-name-length (alignment-record)
   "Returns the length in ASCII characters of the read name of

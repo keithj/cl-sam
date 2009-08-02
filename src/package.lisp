@@ -148,4 +148,3 @@ flagstat:
 ;;;                      (* 100 (/ proper-paired total))
 ;;;                      both-mapped singletons
 ;;;                      (* 100 (/ singletons total)))))"))
-

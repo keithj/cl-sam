@@ -25,8 +25,7 @@
 - file: The name of a block gzippped file.
 - ptr: A foreign pointer to a BGZF struct.
 - open-p: A flag indicating that while T indicates that the foreign
-  pointer may be freed.
-"
+  pointer may be freed."
   (file nil :type t)
   (ptr nil :type t)
   (open-p nil :type t))
