@@ -83,16 +83,25 @@
 
    #:sequenced-pair-p
    #:mapped-proper-pair-p
+   #:query-mapped-p
    #:query-unmapped-p
+   #:mate-mapped-p
    #:mate-unmapped-p
    #:query-forward-p
+   #:query-reverse-p
    #:mate-forward-p
+   #:mate-reverse-p
    #:first-in-pair-p
    #:second-in-pair-p
    #:alignment-not-primary-p
    #:fails-platform-qc-p
    #:pcr/optical-duplicate-p
-   
+
+   #:valid-flag-p
+   #:valid-mapped-pair-p
+   #:valid-mapped-proper-pair-p
+   #:valid-pair-num-p
+
    #:alignment-core
    #:alignment-core-alist
    #:alignment-flag-alist)

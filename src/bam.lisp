@@ -85,17 +85,55 @@ ALIGNMENT-RECORD has been assigned."
 the ALIGNMENT-RECORD. If the VALIDATE key is T (the default) the
 flag's bits are checked for internal consistency."
   (let ((flag (decode-uint16le alignment-record 14)))
-    (when (and validate (not (valid-flag-p flag)))
-      (error 'dxi:malformed-field-error
-             :record (alignment-core alignment-record :validate nil)
-             :field flag
-             :text (format nil (txt "pair-specific flag ~b"
-                                    "set for an unpaired read ~s at ~a"
-                                    "in reference ~d")
-                           flag (read-name alignment-record)
-                           (alignment-position alignment-record)
-                           (reference-id alignment-record))))
-    flag))
+    (if validate
+        (cond ((mapped-proper-pair-p flag)
+               (cond ((not (sequenced-pair-p flag))
+                      (flag-validation-error
+                       flag alignment-record
+                       (txt "the sequenced-pair flag was not set in a mapped"
+                            "proper pair")))
+                     ((not (valid-pair-num-p flag))
+                      (flag-validation-error
+                       flag alignment-record
+                        "first-in-pair and second-in-pair flags were both set"))
+                     ((not (valid-mapped-pair-p flag))
+                      (flag-validation-error
+                       flag alignment-record
+                       (txt "one read was flagged as unmapped in a mapped"
+                            "proper pair")))
+                     ((not (valid-mapped-proper-pair-p flag))
+                      (flag-validation-error
+                       flag alignment-record
+                       (txt "reads were not mapped to opposite strands in a"
+                            "mapped proper pair")))
+                     (t
+                      flag)))
+              ((sequenced-pair-p flag)
+               (if (valid-pair-num-p flag)
+                   flag
+                 (flag-validation-error
+                  flag alignment-record
+                  "first-in-pair and second-in-pair flags were both set")))
+              (t
+               (cond ((mate-reverse-p flag)
+                      (flag-validation-error
+                       flag alignment-record
+                       "the mate-reverse flag was set in an unpaired read"))
+                     ((mate-unmapped-p flag)
+                      (flag-validation-error
+                       flag alignment-record
+                       "the mate-unmapped flag was set in an unpaired read"))
+                     ((first-in-pair-p flag)
+                      (flag-validation-error
+                       flag alignment-record
+                       "the first-in-pair flag was set in an unpaired read"))
+                     ((second-in-pair-p flag)
+                      (flag-validation-error
+                       flag alignment-record
+                       "the second-in-pair flag was set in an unpaired read"))
+                     (t
+                      flag))))
+      flag)))
 
 (defun sequenced-pair-p (flag)
   "Returns T if FLAG indicates that the read was sequenced as a member
@@ -112,20 +150,40 @@ a properly oriented read-pair, or NIL otherwise."
 reference, or NIL otherwise."
   (logbitp 2 flag))
 
+(defun query-mapped-p (flag)
+  "Returns T if FLAG indicates that the read's mate was mapped to a
+reference, or NIL otherwise."
+  (not (query-unmapped-p flag)))
+
 (defun mate-unmapped-p (flag)
   "Returns T if FLAG indicates that the read's mate was not mapped to
 a reference, or NIL otherwise."
   (logbitp 3 flag))
 
+(defun mate-mapped-p (flag)
+  "Returns T if FLAG indicates that the read's mate was mapped to a
+reference, or NIL otherwise."
+  (not (mate-unmapped-p flag)))
+
 (defun query-forward-p (flag)
   "Returns T if FLAG indicates that the read was mapped to the forward
 strand of a reference, or NIL if it was mapped to the reverse strand."
-  (not (logbitp 4 flag)))
+  (not (query-reverse-p flag)))
+
+(defun query-reverse-p (flag)
+  "Returns T if FLAG indicates that the read was mapped to the reverse
+strand of a reference, or NIL if it was mapped to the forward strand."
+  (logbitp 4 flag))
 
 (defun mate-forward-p (flag)
   "Returns T if FLAG indicates that the read's mate was mapped to the
 forward, or NIL if it was mapped to the reverse strand."
-  (not (logbitp 5 flag)))
+  (not (mate-reverse-p flag)))
+
+(defun mate-reverse-p (flag)
+  "Returns T if FLAG indicates that the read's mate was mapped to the
+reverse, or NIL if it was mapped to the forward strand."
+  (logbitp 5 flag))
 
 (defun first-in-pair-p (flag)
   "Returns T if FLAG indicates that the read was the first in a pair
@@ -152,18 +210,38 @@ control, or NIL otherwise."
 duplicate, or NIL otherwise."
   (logbitp 10 flag))
 
+(defun valid-pair-num-p (flag)
+  "Returns T if FLAG indicates a valid pair numbering, that is first and
+not second or second and not first, or NIL otherwise."
+  (or (and (first-in-pair-p flag) (not (second-in-pair-p flag)))
+      (and (second-in-pair-p flag) (not (first-in-pair-p flag)))))
+
+(defun valid-mapped-pair-p (flag)
+  "Returns T if FLAG indicates valid mapping states for a pair of
+mapped reads, that is both must be mapped, or NIL otherwise."
+  (and (query-mapped-p flag) (mate-mapped-p flag)))
+
+(defun valid-mapped-proper-pair-p (flag)
+  "Returns T if FLAG indicates valid proper mapping states for a pair
+of mapped reads, that is both must be mapped and on opposite strands,
+or NIL otherwise."
+  (and (valid-mapped-pair-p flag)
+       (not (eql (query-forward-p flag) (mate-forward-p flag)))))
+
 (defun valid-flag-p (flag)
   "Returns T if the paired-read-specific bits of FLAG are internally
 consistent."
-  (if (not (sequenced-pair-p flag))
-      ;; If unpaired, the pair data bits should not be set
-      (not (or (mapped-proper-pair-p flag)
-               (mate-unmapped-p flag)
-               (first-in-pair-p flag)
-               (second-in-pair-p flag)))
-    ;; If paired, must be a proper pair
-    (or (and (first-in-pair-p flag) (not (second-in-pair-p flag)))
-        (and (second-in-pair-p flag) (not (first-in-pair-p flag))))))
+  (cond ((mapped-proper-pair-p flag)
+         (and (sequenced-pair-p flag)
+              (valid-pair-num-p flag)
+              (valid-mapped-proper-pair-p flag)))
+        ((sequenced-pair-p flag)
+         (valid-pair-num-p flag))
+        (t
+         (not (or (mate-reverse-p flag) ; maybe ignore this one?
+                  (mate-unmapped-p flag)
+                  (first-in-pair-p flag)
+                  (second-in-pair-p flag))))))
 
 (defun read-length (alignment-record)
   "Returns the length of the read described by ALIGNMENT-RECORD."
@@ -397,3 +475,13 @@ INDEX. The BAM two-letter data keys are transformed to Lisp keywords."
                               (setf tag-index (+ val-index 2))
                               (decode-int16le alignment-record val-index)))))
                  (list tag val)))))
+
+(defun flag-validation-error (flag alignment-record msg)
+  (let ((reference-id (reference-id alignment-record))
+        (read-name (read-name alignment-record))
+        (pos (alignment-position alignment-record)))
+  (error 'malformed-field-error
+         :field flag
+         :text (format nil (txt "invalid flag ~b set for read ~s at ~a"
+                                "in reference ~d: ~a")
+                       flag read-name pos reference-id msg))))

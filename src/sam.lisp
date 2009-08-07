@@ -25,7 +25,7 @@
   record type.")
 
 (defmacro define-tag-parser (name (record-type var) tag-specs)
-  "Defines a tag parsing function NAME that parses tag values for sam
+  "Defines a tag parsing function NAME that parses tag values for SAM
 header RECORD-TYPE."
   `(progn
     (defun ,name (str)

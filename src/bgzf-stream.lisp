@@ -158,4 +158,3 @@ the next byte is to be read."))
              do (setf (aref buffer i) (mem-aref array-ptr :unsigned-char i)))
           (setf offset 0
                 num-bytes num-read))))))
-
