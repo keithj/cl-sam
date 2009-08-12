@@ -75,22 +75,23 @@ the next byte is to be read."))
                   :text "failed to close file cleanly"))
       (call-next-method))))
 
-(defmethod stream-file-position ((stream bgzf-input-stream))
-  (let ((position (bgzf-ffi:bgzf-tell (bgzf-of stream))))
-    (when (minusp position)
-      (error 'bgzf-io-error :errno unix-ffi:*c-error-number*
-             :text "failed to find position in file"))
-    (- position (num-bytes-buffered stream))))
-
-(defmethod (setf stream-file-position) (position (stream bgzf-input-stream))
-  (when (minusp (bgzf-ffi:bgzf-seek (bgzf-ptr (bgzf-of stream)) position
-                                    (foreign-enum-value
-                                     'unix-ffi:seek-directive :seek-set)))
-    (error 'bgzf-io-error :errno unix-ffi:*c-error-number*
-           :text "failed to seek in file"))
-  (setf (offset-of stream) 0
-        (num-bytes-of stream) 0)
-  position)
+(defmethod stream-file-position ((stream bgzf-input-stream) &optional position)
+  (cond (position
+         (when (minusp (bgzf-ffi:bgzf-seek
+                        (bgzf-ptr (bgzf-of stream)) position
+                        (foreign-enum-value
+                         'unix-ffi:seek-directive :seek-set)))
+           (error 'bgzf-io-error :errno unix-ffi:*c-error-number*
+                  :text "failed to seek in file"))
+         (setf (offset-of stream) 0
+               (num-bytes-of stream) 0)
+         t)
+        (t
+         (let ((position (bgzf-ffi:bgzf-tell (bgzf-of stream))))
+           (when (minusp position)
+             (error 'bgzf-io-error :errno unix-ffi:*c-error-number*
+                    :text "failed to find position in file"))
+           (- position (num-bytes-buffered stream))))))
 
 (defmethod stream-read-byte ((stream bgzf-input-stream))
   (if (and (buffer-empty-p stream) (zerop (fill-buffer stream)))
@@ -102,25 +103,28 @@ the next byte is to be read."))
         (incf offset)))))
 
 (defmethod stream-read-sequence ((stream bgzf-input-stream) sequence
-                                 start end &key)
+                                 &optional (start 0) end)
   (declare (optimize (speed 3) (safety 1)))
   (macrolet ((define-copy-op (seq-type seq-accessor)
                `(let ((seq-index start))
                   (declare (type ,seq-type sequence)
                            (type fixnum seq-index))
-                  (loop
-                     while (and (not (buffer-empty-p stream)) (< seq-index end))
-                     do (loop
-                           for i of-type fixnum from seq-index below end
-                           for j of-type fixnum from offset below num-bytes
-                           do (progn
-                                (setf (,seq-accessor sequence i)
-                                      (aref buffer j))
-                                (incf seq-index)
-                                (incf offset))
-                           finally (when (buffer-empty-p stream)
-                                     (fill-buffer stream)))
-                     finally (return seq-index)))))
+                    (let ((end (or end (length sequence))))
+                      (declare (type fixnum end))
+                      (loop
+                         while (and (not (buffer-empty-p stream))
+                                    (< seq-index end))
+                         do (loop
+                               for i of-type fixnum from seq-index below end
+                               for j of-type fixnum from offset below num-bytes
+                               do (progn
+                                    (setf (,seq-accessor sequence i)
+                                          (aref buffer j))
+                                    (incf seq-index)
+                                    (incf offset))
+                               finally (when (buffer-empty-p stream)
+                                         (fill-buffer stream)))
+                         finally (return seq-index))))))
     (if (and (buffer-empty-p stream) (zerop (the fixnum (fill-buffer stream))))
         0
       (with-accessors ((buffer buffer-of) (offset offset-of)
@@ -128,7 +132,7 @@ the next byte is to be read."))
           stream
         (declare (type bgzf-buffer buffer)
                  (type bgzf-buffer-index offset num-bytes)
-                 (type fixnum start end))
+                 (type fixnum start))
         (typecase sequence
           ((simple-array (unsigned-byte 8))
            (define-copy-op (simple-array (unsigned-byte 8)) aref))

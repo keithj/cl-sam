@@ -32,7 +32,7 @@
   SAMtools package for function documentation."))
 
 (defpackage :sam
-  (:use #:common-lisp #:cffi #:trivial-gray-streams
+  (:use #:common-lisp #:cffi
         #:deoxybyte-utilities #:deoxybyte-io)
   (:export
    ;; Conditions

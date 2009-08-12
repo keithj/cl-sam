@@ -16,7 +16,7 @@
 ;;;
 
 (defpackage :sam-test
-  (:use #:common-lisp #:sam #:trivial-gray-streams #:lift
+  (:use #:common-lisp #:sam #:lift
         #:deoxybyte-utilities #:deoxybyte-io)
   (:documentation "SAM/BAM alignment format tests.")
   (:export #:cl-sam-tests))

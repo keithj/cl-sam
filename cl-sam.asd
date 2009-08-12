@@ -28,11 +28,11 @@
 
 (defsystem cl-sam
     :name "cl-sam"
-    :version "0.1.3"
+    :version "0.2.0"
     :author "Keith James"
     :licence "GPL v3"
     :depends-on ((:version :cffi "0.10.3")
-                 (:version :deoxybyte-io "0.4.3")
+                 (:version :deoxybyte-io "0.5.0")
                  (:version :deoxybyte-unix "0.6.1")
                  (:version :deoxybyte-utilities "0.5.0"))
     :in-order-to ((test-op (load-op :cl-sam :cl-sam-test)))
