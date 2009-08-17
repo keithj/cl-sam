@@ -22,28 +22,6 @@
 (defconstant +tag-size+ 2
   "The size of a BAM auxilliary tag in bytes.")
 
-(deftype int32 ()
-  "Signed byte 32."
-  '(signed-byte 32))
-
-(defun header-alist (header)
-  "Returns an alist containing the data in string HEADER as Lisp
-objects."
-  (with-input-from-string (s header)
-    (loop
-       for rec = (read-line s nil nil)
-       while rec
-       collect (parse-header-record rec))))
-
-(defun alist-header (alist)
-  "Returns a new SAM header string representing the header data in
-ALIST."
- (with-output-to-string (s)
-   (loop
-      for rec in alist
-      do (write-header-record rec s))))
-
-(declaim (inline reference-id))
 (defun reference-id (alignment-record)
   "Returns the reference sequence identifier of ALIGNMENT-RECORD. This
 is an integer locally assigned to a reference sequence within the

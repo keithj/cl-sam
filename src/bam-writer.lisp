@@ -60,13 +60,21 @@ of length REF-LENGTH bases, to handle BGZF."
     (write-bytes bgzf buffer buffer-len)))
 
 (defun write-alignment (bgzf alignment-record)
+  "Writes one ALIGNMENT-RECORD to handle BGZF and returns the number
+of bytes written."
   (let ((alen (length alignment-record))
         (alen-bytes (make-array 4 :element-type '(unsigned-byte 8))))
     (encode-int32le alen alen-bytes)
-    (write-bytes bgzf alen-bytes 4)
-    (write-bytes bgzf alignment-record alen)))
+    (+ (write-bytes bgzf alen-bytes 4)
+       (write-bytes bgzf alignment-record alen))))
 
 (defun write-bam-meta (bgzf header num-refs ref-meta)
+  "Writes BAM magic number and then all metadata to handle BGZF. The
+metadata consist of the HEADER string, number of reference sequences
+NUM-REFS and a list reference sequence metadata REF-META. The list
+contains one element per reference sequence, each element being a list
+of reference identifier, reference name and reference length. Returns
+the number of bytes written."
   (+ (write-bam-magic bgzf)
      (write-bam-header bgzf header)
      (write-num-references bgzf num-refs)

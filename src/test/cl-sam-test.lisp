@@ -29,6 +29,19 @@
       (read-sequence data stream)
       data)))
 
+(defun test-binary-files (filespec1 filespec2)
+  (with-open-file (s1 filespec1 :element-type '(unsigned-byte 8))
+    (with-open-file (s2 filespec2 :element-type '(unsigned-byte 8))
+      (ensure (loop
+                 for byte1 = (read-byte s1 nil nil)
+                 for byte2 = (read-byte s2 nil nil)
+                 while (and byte1 byte2)
+                 always (= byte1 byte2))
+              :report "files were not byte identical")
+      (ensure (and (null (read-byte s1 nil nil))
+                   (null (read-byte s2 nil nil)))
+              :report "files were not the same length"))))
+
 (addtest (cl-sam-tests) bgzf-seek/tell/1
   (with-bgzf-file (bgzf (namestring (merge-pathnames "data/c1215.bam"))
                         :direction :input)
@@ -183,3 +196,20 @@
 
 (addtest (cl-sam-tests) pcr/optical-duplicate-p/1
   (ensure (pcr/optical-duplicate-p #x0400)))
+
+(addtest (cl-sam-tests) bam-round-trip/1
+  (let ((in-filespec (namestring (merge-pathnames "data/c1215.bam")))
+        (out-filespec (namestring
+                       (make-tmp-pathname :tmpdir (merge-pathnames "data")
+                                          :basename "bam-roundtrip-"))))
+    (with-bgzf-file (in in-filespec :direction :input)
+      (with-bgzf-file (out out-filespec :direction :output)
+        (multiple-value-bind (header num-refs ref-meta)
+            (read-bam-meta in)
+          (write-bam-meta out header num-refs ref-meta)
+          (loop
+             for aln = (read-alignment in)
+             while aln
+             do (write-alignment out aln)))))
+    (test-binary-files in-filespec out-filespec)
+    (delete-file out-filespec)))

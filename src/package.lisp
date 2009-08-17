@@ -59,8 +59,16 @@
    #:read-bam-header
    #:read-num-references
    #:read-reference-meta
-   #:read-alignment
    #:read-bam-meta
+   #:read-alignment
+
+   ;; Low-level BAM writing API
+   #:write-bam-magic
+   #:write-bam-header
+   #:write-num-references
+   #:write-reference-meta
+   #:write-bam-meta
+   #:write-alignment
    
    ;; Low-level BAM API
    #:reference-id

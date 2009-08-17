@@ -38,7 +38,7 @@ header RECORD-TYPE."
         (cond ,@(loop
                    for (tag-val sym form) in tag-specs
                    collect `((string= ,tag-val tag)
-                             (list ,sym ,(if form
+                             (cons ,sym ,(if form
                                             `,form
                                           `,var))))
               (t
@@ -96,6 +96,15 @@ a {define-condition malformed-record-error} ."
                             (mandatory-tags tag-type)
                             (mapcar #'first tags)))))))
 
+(defun parse-sam-header (str)
+  "Returns an alist containing the data in header STR as Lisp
+objects."
+  (with-input-from-string (s str)
+    (loop
+       for rec = (read-line s nil nil)
+       while rec
+       collect (parse-header-record rec))))
+
 (defun parse-header-record (str)
   "Parses a single SAM header record STR and returns an alist. May
 raise a {define-condition malformed-record-error} or
@@ -114,3 +123,20 @@ raise a {define-condition malformed-record-error} or
            (error 'malformed-record-error
                   :record str
                   :text "invalid SAM header record")))))
+
+;; FIXME -- the nested adjoins seem a bit ugly
+(defun update-header-alist (header-record &optional (version "1.0")
+                            (sort-order "unsorted") (group-order "none"))
+  (if (null header-record)
+      (list :hd (mapcar #'list '(:vn :so :go)
+                        (list version sort-order group-order)))
+    (cons :hd (mapcar (lambda (tag-val)
+                        (case (first tag-val)
+                          (:vn tag-val)
+                          (:so (list :so sort-order))
+                          (:go (list :go group-order))))
+                      (adjoin (list :so)
+                              (adjoin (list :go)
+                                      (rest header-record)
+                                      :key #'first)
+                              :key #'first)))))
