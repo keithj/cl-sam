@@ -22,6 +22,10 @@
 (defconstant +tag-size+ 2
   "The size of a BAM auxilliary tag in bytes.")
 
+(deftype int32 ()
+  "Signed byte 32."
+  '(signed-byte 32))
+
 (defun header-alist (header)
   "Returns an alist containing the data in string HEADER as Lisp
 objects."
@@ -39,6 +43,7 @@ ALIST."
       for rec in alist
       do (write-header-record rec s))))
 
+(declaim (inline reference-id))
 (defun reference-id (alignment-record)
   "Returns the reference sequence identifier of ALIGNMENT-RECORD. This
 is an integer locally assigned to a reference sequence within the
@@ -48,6 +53,7 @@ context of a BAM file."
 (defun alignment-position (alignment-record)
   "Returns the 1-based sequence coordinate of ALIGNMENT-RECORD in the
 reference sequence of the first base of the clipped read."
+  (declare (optimize (speed 3)))
   (1+ (decode-int32le alignment-record 4)))
 
 (defun alignment-read-length (alignment-record)

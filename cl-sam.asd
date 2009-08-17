@@ -49,6 +49,7 @@
                            (:file "bam-reader")
                            (:file "bam-writer")
                            (:file "sam-writer")
+                           (:file "external-bam-sort")
                            (:file "bam")
                            (:file "sam")))
      (:lift-test-config :lift-tests

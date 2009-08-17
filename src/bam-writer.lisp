@@ -34,7 +34,8 @@ header."
                              :initial-element +null-byte+)))
     ;; store header length, including padding
     (encode-int32le (+ hlen null-padding) buffer)
-    (copy-array header 0 (1- hlen) buffer 4 #'char-code)
+    (when (plusp hlen)
+      (copy-array header 0 (1- hlen) buffer 4 #'char-code))
     (write-bytes bgzf buffer (length buffer))))
 
 (defun write-num-references (bgzf n)
@@ -46,13 +47,29 @@ header."
 (defun write-reference-meta (bgzf ref-name ref-length)
   "Writes the metadata for a single reference sequence named REF-NAME,
 of length REF-LENGTH bases, to handle BGZF."
-  (let* ((nlen (length ref-name))
-         (blen (+ 4 nlen 1 4))
+  (let* ((name-len (1+ (length ref-name)))
+         (buffer-len (+ 4 name-len 4))
          (name-offset 4)
-         (rlen-offset (+ name-offset nlen))
-         (buffer (make-array blen :element-type '(unsigned-byte 8)
+         (ref-len-offset (+ name-offset name-len))
+         (buffer (make-array buffer-len :element-type '(unsigned-byte 8)
                              :initial-element +null-byte+)))
-    (encode-int32le nlen buffer)
-    (copy-array ref-name 0 (1- nlen) buffer name-offset #'char-code)
-    (encode-int32le ref-length buffer rlen-offset)
-    (write-bytes bgzf buffer blen)))
+    (encode-int32le name-len buffer)
+    (copy-array ref-name 0 (- name-len 2)
+                buffer name-offset #'char-code)
+    (encode-int32le ref-length buffer ref-len-offset)
+    (write-bytes bgzf buffer buffer-len)))
+
+(defun write-alignment (bgzf alignment-record)
+  (let ((alen (length alignment-record))
+        (alen-bytes (make-array 4 :element-type '(unsigned-byte 8))))
+    (encode-int32le alen alen-bytes)
+    (write-bytes bgzf alen-bytes 4)
+    (write-bytes bgzf alignment-record alen)))
+
+(defun write-bam-meta (bgzf header num-refs ref-meta)
+  (+ (write-bam-magic bgzf)
+     (write-bam-header bgzf header)
+     (write-num-references bgzf num-refs)
+     (loop
+        for (ref-id ref-name ref-length) in ref-meta
+        sum (write-reference-meta bgzf ref-name ref-length))))
