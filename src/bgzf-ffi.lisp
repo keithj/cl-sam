@@ -48,3 +48,6 @@
   (fp :pointer)
   (pos unix-ffi:off-t)
   (where :int))
+
+(defcfun ("bgzf_check_EOF" bgzf-check-eof) :boolean
+  (fp :pointer))

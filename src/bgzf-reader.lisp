@@ -19,6 +19,14 @@
 
 (in-package :sam)
 
+(defconstant +empty-bgzf-record+
+  #(#o037 #o213 #o010 #o004 #o000 #o000 #o000 #o000 #o000 #o377
+    #o006 #o000 #o102 #o103 #o002 #o000 #o033 #o000 #o003 #o000
+    #o000 #o000 #o000 #o000 #o000 #o000 #o000 #o000)
+    "SAMtools version >0.1.5 appends an empty BGZF record to allow
+    detection of truncated BAM files. These 28 bytes constitute such a
+    record.")
+
 (defstruct bgzf
   "A BGZF (block gzip file) handle.
 
@@ -154,3 +162,8 @@ string is null-terminated so that the terminator may be consumed."
                n)))
     (let ((bytes (read-bytes bgzf n)))
       (make-sb-string bytes 0 (1- len)))))
+
+(defun bgzf-eof-p (bgzf)
+  "Returns T if the file backing handle BGZF is terminated by an empty
+record indicating EOF, or NIL otherwise."
+  (bgzf-ffi:bgzf-check-eof (bgzf-ptr bgzf)))

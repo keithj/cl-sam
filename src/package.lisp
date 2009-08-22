@@ -26,7 +26,8 @@
            #:bgzf-read
            #:bgzf-write
            #:bgzf-seek
-           #:bgzf-tell)
+           #:bgzf-tell
+           #:bgzf-check-eof)
   (:documentation "A foreign function interface to the block gzip
   functions provided by the Broad Institute. See bgzf.h in the
   SAMtools package for function documentation."))
@@ -47,6 +48,7 @@
    #:bgzf-close
    #:bgzf-seek
    #:bgzf-tell
+   #:bgzf-eof-p
    #:with-bgzf-file
    
    ;; BGZF stream API

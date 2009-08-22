@@ -22,6 +22,11 @@
 (deftestsuite cl-sam-tests ()
   ())
 
+(defparameter *bgzf-eof-bytes*
+  '(#o037 #o213 #o010 #o004 #o000 #o000 #o000 #o000 #o000 #o377
+    #o006 #o000 #o102 #o103 #o002 #o000 #o033 #o000 #o003 #o000
+    #o000 #o000 #o000 #o000 #o000 #o000 #o000 #o000))
+
 (defun read-raw-data (filespec)
   (with-open-file (stream filespec :direction :input
                           :element-type '(unsigned-byte 8))
@@ -36,11 +41,27 @@
                  for byte1 = (read-byte s1 nil nil)
                  for byte2 = (read-byte s2 nil nil)
                  while (and byte1 byte2)
-                 always (= byte1 byte2))
+                 always (= byte1 byte2)
+                 finally (cond ((null byte1)
+                                (file-position s2 (1- (file-position s2))))
+                               ((null byte2)
+                                (file-position s1 (1- (file-position s1))))))
               :report "files were not byte identical")
-      (ensure (and (null (read-byte s1 nil nil))
-                   (null (read-byte s2 nil nil)))
-              :report "files were not the same length"))))
+      ;; Files may have an empty BGZF record as EOF terminator
+      (let ((eof1 (loop
+                     for byte = (read-byte s1 nil nil)
+                     while byte
+                     collect byte))
+            (eof2 (loop
+                     for byte = (read-byte s2 nil nil)
+                     while byte
+                     collect byte)))
+        (ensure (or (null eof1) (equalp *bgzf-eof-bytes* eof1))
+                :report "expected nil or ~a but found ~a"
+                :arguments (*bgzf-eof-bytes*  eof1))
+        (ensure (or (null eof2) (equalp *bgzf-eof-bytes* eof2))
+                :report "expected nil or ~a but found ~a"
+                :arguments (*bgzf-eof-bytes*  eof2))))))
 
 (addtest (cl-sam-tests) bgzf-seek/tell/1
   (with-bgzf-file (bgzf (namestring (merge-pathnames "data/c1215.bam"))

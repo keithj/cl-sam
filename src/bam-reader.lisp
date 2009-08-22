@@ -78,3 +78,12 @@ list of reference identifier, reference name and reference length."
                for ref-id from 0 below num-refs
                collect (cons ref-id (multiple-value-list
                                      (read-reference-meta bgzf)))))))
+
+(defun read-bam-terminator (bgzf)
+  "Reads the EOF from handle BGZF, returning T if it is present, or
+raising a {define-condition malformed-file-error} otherwise."
+  (if (bgzf-eof-p bgzf-eof-p)
+      t
+    (error 'malformed-file-error
+           :file (bgzf-file bgzf)
+           :text "BGZF EOF was missing")))
