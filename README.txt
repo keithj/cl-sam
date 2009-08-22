@@ -14,10 +14,10 @@ The operations supported in this release are:
 
          SAM    BAM
 Read      No    Yes
-Write     No    No
+Write     No    Yes
 
 BAM read performance is roughly 0.5x the speed of SAMtools C
-implementation (SBCL 1.0.29.54 X86_64).
+implementation (SBCL 1.0.30 X86_64).
 
 
 Installation

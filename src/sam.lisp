@@ -24,6 +24,12 @@
   "A mapping that describes the mandatory tags for each SAM header
   record type.")
 
+(defparameter *valid-tags* (pairlis '(:hd :sq :rg :pg)
+                                    '((:vn :so :go)
+                                      (:sn :ln :as :m5 :ur :sp)
+                                      (:id :sm :lb :ds :pu :pi :cn :dt :pl)
+                                      (:id :vn :cl))))
+
 (defmacro define-tag-parser (name (record-type var) tag-specs)
   "Defines a tag parsing function NAME that parses tag values for SAM
 header RECORD-TYPE."
@@ -91,10 +97,25 @@ a {define-condition malformed-record-error} ."
         header-record
       (error 'malformed-record-error
              :record header-record
-             :text (format nil "missing mandatory ~a tags"
-                           (set-difference 
-                            (mandatory-tags tag-type)
-                            (mapcar #'first tags)))))))
+             :text (let ((diff (set-difference (mandatory-tags tag-type)
+                                               (mapcar #'first tags))))
+                     (format nil "~r missing mandatory tag~:p ~a"
+                             (length diff) diff))))))
+
+(defun valid-tags (record-type)
+  (rest (assoc record-type *valid-tags*)))
+
+(defun ensure-valid-tags (header-record)
+  (let ((tag-type (first header-record))
+        (tags (rest header-record)))
+    (if (subsetp (valid-tags tag-type) (mapcar #'first tags))
+        header-record
+        (error 'malformed-record-error
+             :record header-record
+             :text (let ((diff (set-difference (mapcar #'first tags)
+                                               (valid-tags tag-type))))
+                     (format nil "~r invalid tag~:p ~a"
+                             (length diff) diff))))))
 
 (defun parse-sam-header (str)
   "Returns an alist containing the data in header STR as Lisp
@@ -123,20 +144,3 @@ raise a {define-condition malformed-record-error} or
            (error 'malformed-record-error
                   :record str
                   :text "invalid SAM header record")))))
-
-;; FIXME -- the nested adjoins seem a bit ugly
-(defun update-header-alist (header-record &optional (version "1.0")
-                            (sort-order "unsorted") (group-order "none"))
-  (if (null header-record)
-      (list :hd (mapcar #'list '(:vn :so :go)
-                        (list version sort-order group-order)))
-    (cons :hd (mapcar (lambda (tag-val)
-                        (case (first tag-val)
-                          (:vn tag-val)
-                          (:so (list :so sort-order))
-                          (:go (list :go group-order))))
-                      (adjoin (list :so)
-                              (adjoin (list :go)
-                                      (rest header-record)
-                                      :key #'first)
-                              :key #'first)))))
