@@ -10,7 +10,7 @@ formats. cl-sam originated as a small set of functions for exploring
 example BAM files and therefore provides only a subset of possible
 SAM/BAM read/write operations.
 
-The operations supported in this release are:
+The operations supported in this version are:
 
          SAM    BAM
 Read      No    Yes
@@ -77,7 +77,7 @@ deoxybyte-unix          git://github.com/keithj/deoxybyte-unix.git
 
 CFFI                    http://common-lisp.net/project/cffi/
 
-SAMtools                http://samtools.sourceforge.net
+SAMtools                http://samtools.sourceforge.net version >= 0.1.5
 
 cl-sam requires a C shared library for block-gzip file reading. This
 is created from the SAMtools C source using the makefile provided in
