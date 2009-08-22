@@ -1,0 +1,71 @@
+
+Sequence Alignment/Map (SAM) Format
+Version 0.1.2-draft (20090416)
+
+
+This file describes difficulties that have emerged when using SAM (and
+BAM) files in production together with and proposed changes to the
+spec. that address these issues.
+
+Most problems arise from cases where SAM files are merged, which I
+assume is an expected use-case of the files.
+
+
+In section 1.3. Nomenclature
+
+ * The term "read group" should be defined here as it is a central
+   concept to SAM files that is not described anywhere in the spec.
+
+
+In section 2.1. Header section
+
+ * The header should be mandatory because it contains the version (VN)
+   tag.
+
+ * The intended namespace of identifiers for RG records should be
+   mentioned, especially expected behaviour of implementations where
+   RG identifiers clash.
+
+ * There is no way to relate the PG record to the alignments produced,
+   except using the file as scope. This causes data loss on merging
+   files.
+
+ * The fields in the RG record for sequencing centre, platform
+   etc. would benefit from using some kind of controlled vocabulary,
+   otherwise for example "Sanger", "SANGER", "Sanger Institute" and
+   "sanger" would be resolved as distinct sequencing centres, when
+   they are not.
+
+
+In section 2.2.1. Overview, footnote 2.
+
+ * The statement "The name of a pair/read is required to be unique in
+   the SAM file" should be explained and given far greater prominence
+   in the spec. as it is central to data integrity in SAM files.
+
+   In fact, "unique" does not mean lexically unique for a particular
+   read, but rather it means logically unique with respect to the
+   alignments for that read within the scope of a file. i.e. if two
+   aligners align a read at different positions on a reference the
+   alignments *may* coexist in a file because they are logically
+   distinct, whereas if the aligners agree on the position of the read
+   they may *may not* coexist in a file because they are logically
+   identical *even if they in different read-groups*. This point
+   emphasises why the definition of "read group" should be added to
+   the spec.
+
+   The definition of logical uniqueness is likewise not defined for
+   paired reads, yet will necessarily be more complex than for
+   single. Until this is resolved, expect file-merging programs to
+   have undefined results when operating on such files.
+
+   This is my understanding of the situation, following correspondence
+   on the samtools-dev mailing list.
+
+   The currently suggested workaround is to append to each read name a
+   string specific for a combination of aligner, aligner version and
+   aligner arguments, such that they become lexically unqiue and no
+   longer have to be logically unique. Unfortunately I cannot agree
+   with this strategy because it destroys traceability in the data
+   flow. This type of renaming is the bane of bioinformatics data
+   management.
