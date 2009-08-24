@@ -26,9 +26,11 @@ In section 2.1. Header section
    mentioned, especially expected behaviour of implementations where
    RG identifiers clash.
 
- * There is no way to relate the PG record to the alignments produced,
-   except using the file as scope. This causes data loss on merging
-   files.
+ * Where different command lines are used for the same aligner there
+   is no way to associate specific aligner runs with specific
+   alignments because the link is made through the PG identifier. The
+   PG identifier only indentifies the aligner, not the combination of
+   aligner, aligner version and aligner arguments.
 
  * The fields in the RG record for sequencing centre, platform
    etc. would benefit from using some kind of controlled vocabulary,
