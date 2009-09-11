@@ -85,7 +85,9 @@ header RECORD-TYPE."
   (("ID" :id) ("VN" :vn) ("CL" :cl)))
 
 (defun mandatory-tags (record-type)
-  "Returns a list of the mandatory tags for SAM header RECORD-TYPE."
+  "Returns a list of the mandatory tags for SAM header
+RECORD-TYPE. Both RECORD-TYPE. and the returned tags are represented
+as symbols."
   (rest (assoc record-type *mandatory-tags*)))
 
 (defun ensure-mandatory-tags (header-record)
@@ -103,14 +105,19 @@ a {define-condition malformed-record-error} ."
                              (length diff) diff))))))
 
 (defun valid-tags (record-type)
+  "Returns a list of the valid tags for SAM header RECORD-TYPE. Both
+RECORD-TYPE. and the returned tags are represented as symbols."
   (rest (assoc record-type *valid-tags*)))
 
 (defun ensure-valid-tags (header-record)
+  "Checks list HEADER-RECORD for tag validity and returns
+HEADER-RECORD or raises a {define-condition malformed-record-error} if
+invalid tags are present."
   (let ((tag-type (first header-record))
         (tags (rest header-record)))
     (if (subsetp (valid-tags tag-type) (mapcar #'first tags))
         header-record
-        (error 'malformed-record-error
+      (error 'malformed-record-error
              :record header-record
              :text (let ((diff (set-difference (mapcar #'first tags)
                                                (valid-tags tag-type))))
