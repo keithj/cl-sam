@@ -58,6 +58,11 @@ The components of cl-sam are divided by file as follows:
 
  bam.lisp          High-level BAM record data reading functions.
  bam-reader.lisp   High-level BAM file reading functions.
+ bam-writer.lisp   High-level BAM file writing functions.
+
+ sam.lisp          High-level SAM record data reading functions.
+ sam-reader.lisp   High-level SAM file reading functions.
+ sam-writer.lisp   High-level SAM file writing functions.
 
  bgzf-reader.lisp  Low-level BGZF seek and read functions.
  bgzf-stream.lisp  Low-level BGZF Gray stream implementation. An alternative
