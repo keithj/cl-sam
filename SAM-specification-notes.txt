@@ -3,9 +3,9 @@ Sequence Alignment/Map (SAM) Format
 Version 0.1.2-draft (20090416)
 
 
-This file describes difficulties that have emerged when using SAM (and
-BAM) files in production together with and proposed changes to the
-spec. that address these issues.
+This file describes observations that I've made when using SAM (and
+BAM) files in production together with potential changes to the
+spec. that address some of the difficulties encountered.
 
 Most problems arise from cases where SAM files are merged, which I
 assume is an expected use-case of the files.
@@ -29,8 +29,9 @@ In section 2.1. Header section
  * Where different command lines are used for the same aligner there
    is no way to associate specific aligner runs with specific
    alignments because the link is made through the PG identifier. The
-   PG identifier only indentifies the aligner, not the combination of
-   aligner, aligner version and aligner arguments.
+   recommended PG identifier is the program name which only
+   indentifies the aligner, not the combination of aligner, aligner
+   version and aligner arguments.
 
  * The fields in the RG record for sequencing centre, platform
    etc. would benefit from using some kind of controlled vocabulary,
