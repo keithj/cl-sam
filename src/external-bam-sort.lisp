@@ -87,14 +87,14 @@
   (let ((ref1 (reference-id alignment-record1))
         (ref2 (reference-id alignment-record2)))
     (declare (type int32 ref1 ref2))
-    (cond ((= ref1 ref2)
-           (alignment-position< alignment-record1 alignment-record2))
-          ((minusp ref1)
+    (cond ((minusp ref1) ; unmapped read
            nil)
-          ((minusp ref2)
+          ((minusp ref2) ; unmapped read
            t)
+          ((= ref1 ref2)
+           (alignment-position< alignment-record1 alignment-record2))
           (t
-           t))))
+           (< ref1 ref2)))))
 
 ;; FIXME -- edit the header to include proper sort metadata
 (defun sort-bam-file (in-filespec out-filespec predicate

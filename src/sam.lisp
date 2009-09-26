@@ -84,59 +84,22 @@ header RECORD-TYPE."
 (define-tag-parser parse-pg-tag ("PG" value)
   (("ID" :id) ("VN" :vn) ("CL" :cl)))
 
-(defun mandatory-tags (record-type)
-  "Returns a list of the mandatory tags for SAM header
-RECORD-TYPE. Both RECORD-TYPE. and the returned tags are represented
-as symbols."
-  (rest (assoc record-type *mandatory-tags*)))
+(defun make-header-record (str)
+  "Parses a single SAM header record STR and returns a list. May
+raise a {define-condition malformed-record-error} or {define-condition
+malformed-field-error} . SAM tags are converted to keyword symbols.
 
-(defun ensure-mandatory-tags (header-record)
-  "Returns HEADER-RECORD if all mandatory tags are present, or raises
-a {define-condition malformed-record-error} ."
-  (let ((tag-type (first header-record))
-        (tags (rest header-record)))
-    (if (subsetp (mandatory-tags tag-type) (mapcar #'first tags))
-        header-record
-      (error 'malformed-record-error
-             :record header-record
-             :text (let ((diff (set-difference (mandatory-tags tag-type)
-                                               (mapcar #'first tags))))
-                     (format nil "~r missing mandatory tag~:p ~a"
-                             (length diff) diff))))))
+Given a header record of
 
-(defun valid-tags (record-type)
-  "Returns a list of the valid tags for SAM header RECORD-TYPE. Both
-RECORD-TYPE. and the returned tags are represented as symbols."
-  (rest (assoc record-type *valid-tags*)))
+;;; \"@SQ	SN:AL096846	LN:6490	SP:Schizosaccharomyces pombe\"
 
-(defun ensure-valid-tags (header-record)
-  "Checks list HEADER-RECORD for tag validity and returns
-HEADER-RECORD or raises a {define-condition malformed-record-error} if
-invalid tags are present."
-  (let ((tag-type (first header-record))
-        (tags (rest header-record)))
-    (if (subsetp (valid-tags tag-type) (mapcar #'first tags))
-        header-record
-      (error 'malformed-record-error
-             :record header-record
-             :text (let ((diff (set-difference (mapcar #'first tags)
-                                               (valid-tags tag-type))))
-                     (format nil "~r invalid tag~:p ~a"
-                             (length diff) diff))))))
+the returned list will be
 
-(defun parse-sam-header (str)
-  "Returns an alist containing the data in header STR as Lisp
-objects."
-  (with-input-from-string (s str)
-    (loop
-       for rec = (read-line s nil nil)
-       while rec
-       collect (parse-header-record rec))))
+;;;  (:SQ (:SN . \"AL096846\") (:LN . 6490)
+;;;       (:SP . \"Schizosaccharomyces pombe\"))
 
-(defun parse-header-record (str)
-  "Parses a single SAM header record STR and returns an alist. May
-raise a {define-condition malformed-record-error} or
-{define-condition malformed-field-error} ."
+thus the list's first element is a keyword describing the record type
+and the rest of the list is itself an alist of record keys and values."
   (flet ((tags (fn)
            (mapcar fn (rest (string-split str #\Tab)))))
     (cond ((starts-with-string-p str "@HD")
@@ -151,3 +114,177 @@ raise a {define-condition malformed-record-error} or
            (error 'malformed-record-error
                   :record str
                   :text "invalid SAM header record")))))
+
+(defun header-record-type (record)
+  "Returns a symbol indicating the record-type of HEADER-RECORD, being
+one of :HD , :SQ , :RG or :PG ."
+  (first record))
+
+(defun header-record-tags (record)
+  "Returns an alist of the tag-values of HEADER-RECORD."
+  (rest record))
+
+(defun mandatory-tags (record-type)
+  "Returns a list of the mandatory tags for SAM header
+RECORD-TYPE. Both RECORD-TYPE. and the returned tags are represented
+as symbols."
+  (rest (assoc record-type *mandatory-tags*)))
+
+(defun ensure-mandatory-tags (record)
+  "Returns HEADER-RECORD if all mandatory tags are present, or raises
+a {define-condition malformed-record-error} ."
+  (let ((tag-type (header-record-type record))
+        (tags (header-record-tags record)))
+    (unless (subsetp (mandatory-tags tag-type) (mapcar #'first tags))
+      (error 'malformed-record-error
+             :record record
+             :text (let ((diff (set-difference (mandatory-tags tag-type)
+                                               (mapcar #'first tags))))
+                     (format nil "~r missing mandatory tag~:p ~a"
+                             (length diff) diff))))
+    record))
+
+(defun valid-tags (record-type)
+  "Returns a list of the valid tags for SAM header RECORD-TYPE. Both
+RECORD-TYPE and the returned tags are represented as symbols."
+  (rest (assoc record-type *valid-tags*)))
+
+(defun ensure-valid-tags (record)
+  "Checks list HEADER-RECORD for tag validity and returns
+HEADER-RECORD or raises a {define-condition malformed-record-error} if
+invalid tags are present."
+  (let ((tag-type (header-record-type record))
+        (tags (header-record-tags record)))
+    (unless (subsetp (valid-tags tag-type) (mapcar #'first tags))
+      (error 'malformed-record-error
+             :record record
+             :text (let ((diff (set-difference (mapcar #'first tags)
+                                               (valid-tags tag-type))))
+                     (format nil "~r invalid tag~:p ~a"
+                             (length diff) diff))))
+    record))
+
+(defun merge-header-records (record1 record2)
+  "Returns a new header record created by merging the tags of
+header-records RECORD1 and RECORD2. Records may be safely merged if
+they have the same record-type and do not contain any conflicting tag
+values."
+  (unless (eql (header-record-type record1) (header-record-type record2))
+    (error 'invalid-operation-error
+           :text (format nil
+                         "invalid merge caused by different record-types in ~a"
+                         (list record1 record2))))
+  (let* ((merged (cons (header-record-type record1)
+                       (remove-duplicates
+                        (concatenate 'list
+                                     (header-record-tags record1)
+                                     (header-record-tags record2))
+                        :test #'equalp)))
+         (clashes (find-duplicate-tags merged)))
+    (when clashes
+      (error 'invalid-operation-error
+             :text (format nil
+                           "invalid merge caused by clashing tags ~a in ~a"
+                           clashes (list record1 record2))))
+    merged))
+
+(defun make-sam-header (str)
+  "Returns a list containing the data in header STR as Lisp
+objects.
+
+Given a header of
+
+;;; \"@HD	VN:1.0
+;;; @SQ	SN:AL096846	LN:6490	SP:Schizosaccharomyces pombe
+;;; @PG	ID:bwa	VN:0.4.6	CL:aln -n 0.04 -o 1 -e -1 -i 5 -d 10 -k 2 -M 3 -O 11 -E 4\"
+
+the returned list will be
+
+;;; ((:HD (:VN . \"1.0\"))
+;;;  (:SQ (:SN . \"AL096846\") (:LN . 6490)
+;;;       (:SP . \"Schizosaccharomyces pombe\"))
+;;;  (:PG (:ID . \"bwa\") (:VN . \"0.4.6\")
+;;;       (:CL . \"aln -n 0.04 -o 1 -e -1 -i 5 -d 10 -k 2 -M 3 -O 11 -E 4\"))))
+
+thus each list element is a list whose first element is a keyword
+describing the record type. The rest of each list is itself an alist
+of record keys and values."
+  (with-input-from-string (s str)
+    (loop
+       for rec = (read-line s nil nil)
+       while rec
+       collect (make-header-record rec))))
+
+(defun merge-sam-headers (&rest headers)
+  "Returns a new SAM header that is the result of merging
+HEADERS. Headers may be safely merged if none of their constituent
+records contain conflicting tag values once merged."
+  (multiple-value-bind (hd sq rg pg)
+      (partition-by-type headers)
+    (delete-if #'null
+               (nconc (list (reduce #'merge-header-records
+                                    (remove-duplicates hd :test #'equalp)))
+                      (simplify-records sq :sn)
+                      (simplify-records rg :id)
+                      (simplify-records pg :id)))))
+
+(defun partition-by-type (headers)
+  "Collects all the header-records in HEADERS by record-type, sorts
+them and returns 4 values that are lists of the collected :hd , :sq
+, :rg and :pg header-records, respectively."
+  (flet ((sort-records (records tag)
+           (stable-sort records #'string<
+                        :key (lambda (x)
+                               (assocdr tag (header-record-tags x))))))
+    (let (hd sq rg pg)
+      (dolist (header headers
+               (values (nreverse hd)
+                       (sort-records sq :sn)
+                       (sort-records rg :id)
+                       (sort-records pg :id)))
+        (dolist (record header)
+          (ecase (header-record-type record)
+            (:hd (push record hd))
+            (:sq (push record sq))
+            (:rg (push record rg))
+            (:pg (push record pg))))))))
+
+(defun simplify-records (records id-tag)
+  (let* ((unique (remove-duplicates records :test #'equalp))
+         (groups (group-by-id unique id-tag))
+         (simplified ()))
+    (dolist (record unique (nreverse simplified))
+      (let* ((id (assocdr id-tag (header-record-tags record)))
+             (group (gethash id groups)))
+        (if (endp (rest group))
+            (push (first group) simplified)
+          ;; Put tag conflict test here
+          (push (reduce #'merge-header-records (nreverse group)) simplified))
+        (remhash id groups)))))
+
+(defun group-by-id (records id-tag)
+  (let ((groups (make-hash-table :test #'equalp)))
+    (dolist (record records groups)
+      (let* ((id (assocdr id-tag (header-record-tags record)))
+             (group (gethash id groups)))
+        (setf (gethash id groups) (if group
+                                      (cons record group)
+                                    (list record)))))))
+
+(defun find-duplicate-tags (record)
+  ;; hash-table size reflects the maximum number of possible tags in a
+  ;; record according to the SAM spec
+  (let ((tags (header-record-tags record))
+        (duplicates (make-hash-table :size 10)))
+    (loop
+       for (tag . val) in tags
+       for prev = (gethash tag duplicates)
+       do (setf (gethash tag duplicates) (if prev
+                                             (cons val prev)
+                                           (list val)))
+       finally (return (loop
+                          for tag being the hash-keys of duplicates
+                          using (hash-value vals)
+                          unless (endp (rest vals))
+                          collect (list tag (nreverse vals)))))))
+
