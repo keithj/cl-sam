@@ -15,7 +15,7 @@ fasl:
 	--eval "(progn (asdf:operate 'asdf:compile-op :cl-sam) (quit))"
 
 doc:
-	sbcl ---dynamic-space-size 512 -noinform --noprint --load make-doc.lisp
+	sbcl --dynamic-space-size 512 --noinform --noprint --load make-doc.lisp
 
 test:
 	sbcl --dynamic-space-size 512 --noinform --noprint \

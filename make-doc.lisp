@@ -17,7 +17,6 @@
 
 (in-package :cl-user)
 
-(asdf:operate 'asdf:load-op :deoxybyte-graphics)
 (asdf:operate 'asdf:load-op :cl-sam)
 
 (dxs:document-system :cl-sam)
