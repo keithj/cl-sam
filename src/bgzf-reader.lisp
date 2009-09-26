@@ -136,15 +136,14 @@ of unsigned-byte 8. If fewer than N bytes are available an a
   (declare (optimize (speed 3) (safety 0)))
   (declare (type fixnum n))
   (with-foreign-object (array-ptr :unsigned-char n)
-    (let ((num-read (bgzf-ffi:bgzf-read (bgzf-ptr bgzf) array-ptr n)))
+    (let ((num-read (bgzf-ffi:bgzf-read (bgzf-ptr bgzf) array-ptr n))
+          (msg  "expected to read ~a bytes but only ~a were available"))
       (declare (type fixnum num-read))
       (cond ((zerop num-read)
              nil)
             ((< num-read n)
              (error 'bgzf-io-error
-                    :text (format nil #.(txt "expected to read ~a bytes"
-                                             "but only ~a were available")
-                                  n num-read)))
+                    :text (format nil msg n num-read)))
             (t
              (let ((buffer (make-array n :element-type '(unsigned-byte 8))))
                (loop
