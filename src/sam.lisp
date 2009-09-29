@@ -231,17 +231,16 @@ records contain conflicting tag values once merged."
 (defun partition-by-type (headers)
   "Collects all the header-records in HEADERS by record-type, sorts
 them and returns 4 values that are lists of the collected :hd , :sq
-, :rg and :pg header-records, respectively."
+, :rg and :pg header-records, respectively. Does not modify HEADERS."
   (flet ((sort-records (records tag)
            (stable-sort records #'string<
                         :key (lambda (x)
                                (assocdr tag (header-record-tags x))))))
     (let (hd sq rg pg)
-      (dolist (header headers
-               (values (nreverse hd)
-                       (sort-records sq :sn)
-                       (sort-records rg :id)
-                       (sort-records pg :id)))
+      (dolist (header headers (values (nreverse hd)
+                                      (sort-records sq :sn)
+                                      (sort-records rg :id)
+                                      (sort-records pg :id)))
         (dolist (record header)
           (ecase (header-record-type record)
             (:hd (push record hd))
@@ -250,6 +249,10 @@ them and returns 4 values that are lists of the collected :hd , :sq
             (:pg (push record pg))))))))
 
 (defun simplify-records (records id-tag)
+  "Returns a simplified list of header-records copied from
+RECORDS. The simplifications are removal of perfect duplicates,
+grouping of header-records by ID-TAG value and subsequent merging of
+header-records that share that ID-TAG value."
   (let* ((unique (remove-duplicates records :test #'equalp))
          (groups (group-by-id unique id-tag))
          (simplified ()))
@@ -258,11 +261,14 @@ them and returns 4 values that are lists of the collected :hd , :sq
              (group (gethash id groups)))
         (if (endp (rest group))
             (push (first group) simplified)
-          ;; Put tag conflict test here
           (push (reduce #'merge-header-records (nreverse group)) simplified))
         (remhash id groups)))))
 
 (defun group-by-id (records id-tag)
+  "Returns a hash-table of header-records taken from list RECORDS. The
+hash-table keys are ID-TAG values taken from the records and the
+hash-table values are lists of header-records that share that ID-TAG
+value."
   (let ((groups (make-hash-table :test #'equalp)))
     (dolist (record records groups)
       (let* ((id (assocdr id-tag (header-record-tags record)))
@@ -287,4 +293,3 @@ them and returns 4 values that are lists of the collected :hd , :sq
                           using (hash-value vals)
                           unless (endp (rest vals))
                           collect (list tag (nreverse vals)))))))
-

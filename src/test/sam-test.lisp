@@ -24,10 +24,11 @@
             (cons (header-record-type record)
                   (sort (header-record-tags record) #'string<
                         :key (lambda (x)
-                               (symbol-name (first x)))))) header))
+                               (symbol-name (first x))))))
+          (copy-tree header)))
 
 (addtest (cl-sam-tests) make-header-record/1
-  (ensure (equalp '(:sq (:sn . "al096846") (:ln . 6490)
+  (ensure (equalp '(:sq (:sn . "AL096846") (:ln . 6490)
                     (:sp . "Schizosaccharomyces pombe"))
                   (make-header-record
                    "@SQ	SN:AL096846	LN:6490	SP:Schizosaccharomyces pombe"))))
@@ -86,11 +87,10 @@
       (merge-sam-headers header1 header2))))
 
 (addtest (cl-sam-tests) make-sam-header/1
-  (let ((expected (list (list :hd (cons :vn "1.0"))
-                        (list :sq
-                              (cons :sn "AL096846")
-                              (cons :ln 6490)
-                              (cons :sp "Schizosaccharomyces pombe"))))
+  (let ((expected '((:hd (:vn . "1.0"))
+                    (:sq (:sn . "AL096846") (:ln . 6490)
+                     (:sp . "Schizosaccharomyces pombe"))))
         (result (make-sam-header "@HD	VN:1.0
 @SQ	SN:AL096846	LN:6490	SP:Schizosaccharomyces pombe")))
-    (ensure (equalp expected result))))
+    (ensure (equalp (canonical-header expected)
+                    (canonical-header result)))))
