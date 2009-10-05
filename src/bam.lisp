@@ -395,7 +395,8 @@ NIL is returned."
          finally (return str)))))
 
 (defun decode-cigar (alignment-record index cigar-len)
-  "Returns a list of CIGAR operations from ALIGNMENT-RECORD at INDEX."
+  "Returns a list of CIGAR operations from CIGAR-LEN bytes within
+ALIGNMENT-RECORD, starting at INDEX."
   (flet ((decode-len (uint32)
            (ash uint32 -4))
          (decode-op (uint32)
@@ -409,13 +410,12 @@ NIL is returned."
              (6 :p))))
     (loop
        for i from index below (1- (+ index cigar-len)) by 4
-       collect (decode-uint32le alignment-record i) into cigar
-       finally (return (mapcar (lambda (x)
-                                 (list (decode-op x) (decode-len x))) cigar)))))
+       collect (let ((x (decode-uint32le alignment-record i)))
+                 (list (decode-op x) (decode-len x))))))
 
 (defun decode-tag-values (alignment-record index)
-  "Returns an alist of auxilliary data from ALIGNMENT-RECORD at
-INDEX. The BAM two-letter data keys are transformed to Lisp keywords."
+  "Returns a list of auxilliary data from ALIGNMENT-RECORD at
+INDEX."
   (declare (optimize (speed 3) (safety 0)))
   (declare (type (simple-array (unsigned-byte 8)) alignment-record)
            (type fixnum index))
