@@ -122,8 +122,8 @@
    #:make-header-record
    #:header-record-type
    #:header-record-tags
-   #:ensure-mandatory-tags
-   #:ensure-valid-tags
+   #:ensure-mandatory-header-tags
+   #:ensure-valid-header-tags
    #:merge-header-records)
   (:documentation "cl-sam is a Common Lisp toolkit for manipulation of
 DNA sequence alignment data stored in the Sequence Alignment/Map (SAM)

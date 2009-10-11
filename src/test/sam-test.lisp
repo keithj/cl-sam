@@ -37,28 +37,28 @@
   (ensure-condition malformed-record-error
     (make-header-record "@INVALID-TYPE	SN:AL096846")))
 
-(addtest (cl-sam-tests) ensure-mandatory-tags/1
-  (ensure (ensure-mandatory-tags '(:hd (:vn . "1.0"))))
-  (ensure (ensure-mandatory-tags '(:sq (:sn . "foo") (:ln . 100))))
-  (ensure (ensure-mandatory-tags '(:rg (:id . "foo") (:sm . "bar"))))
-  (ensure (ensure-mandatory-tags '(:pg (:id . "foo")))))
+(addtest (cl-sam-tests) ensure-mandatory-header-tags/1
+  (ensure (ensure-mandatory-header-tags '(:hd (:vn . "1.0"))))
+  (ensure (ensure-mandatory-header-tags '(:sq (:sn . "foo") (:ln . 100))))
+  (ensure (ensure-mandatory-header-tags '(:rg (:id . "foo") (:sm . "bar"))))
+  (ensure (ensure-mandatory-header-tags '(:pg (:id . "foo")))))
 
-(addtest (cl-sam-tests) ensure-mandatory-tags/2
+(addtest (cl-sam-tests) ensure-mandatory-header-tags/2
   (ensure-condition malformed-record-error
-    (ensure-mandatory-tags '(:hd nil)))
+    (ensure-mandatory-header-tags '(:hd nil)))
   (ensure-condition malformed-record-error
-    (ensure-mandatory-tags '(:sq (:sn . "foo"))))
+    (ensure-mandatory-header-tags '(:sq (:sn . "foo"))))
   (ensure-condition malformed-record-error
-    (ensure-mandatory-tags '(:rg (:id . "foo"))))
+    (ensure-mandatory-header-tags '(:rg (:id . "foo"))))
   (ensure-condition malformed-record-error
-    (ensure-mandatory-tags '(:pg nil))))
+    (ensure-mandatory-header-tags '(:pg nil))))
 
-(addtest (cl-sam-tests) ensure-valid-tags/1
-  (ensure (ensure-mandatory-tags '(:hd (:vn . "1.0")))))
+(addtest (cl-sam-tests) ensure-valid-header-tags/1
+  (ensure (ensure-mandatory-header-tags '(:hd (:vn . "1.0")))))
 
-(addtest (cl-sam-tests) ensure-mandatory-tags/2
+(addtest (cl-sam-tests) ensure-valid-header-tags/2
   (ensure-condition malformed-record-error
-    (ensure-valid-tags '(:hd (:invalid . "invalid")))))
+    (ensure-valid-header-tags '(:hd (:invalid . "invalid")))))
 
 (addtest (cl-sam-tests) merge-sam-headers/1
   (let ((header '((:hd (:vn . "1.0"))
