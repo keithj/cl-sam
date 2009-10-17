@@ -22,21 +22,55 @@
 (defconstant +tag-size+ 2
   "The size of a BAM auxilliary tag in bytes.")
 
+(defgeneric encode-alignment-tag (value tag vector index)
+  (:documentation "Performs binary encoding of VALUE into VECTOR under
+  TAG at INDEX, returning VECTOR."))
+
+(defgeneric alignment-tag-bytes (tag value)
+  (:documentation "Returns the size in bytes required to binary encode
+  VALUE under TAG."))
+
+(defgeneric alignment-tag-documentation (tag)
+  (:documentation "Returns the documentation for TAG or NIL if none is
+  available."))
+
+(defmethod encode-alignment-tag (value tag vector index)
+  (declare (ignore value vector index))
+  (error "Unknown tag ~a." tag))
+
+(defmethod alignment-tag-bytes (tag value)
+  (declare (ignore value))
+  (error "Unknown tag ~a." tag))
+
+(defmethod alignment-tag-documentation (tag)
+  (error "Unknown tag ~a." tag))
+
 (defmacro define-alignment-tag (tag value-type &optional docstring)
-  (let ((fn (ecase value-type
-              (:char 'encode-char-tag)
-              (:string 'encode-string-tag)
-              (:uint8 'encode-uint8-tag)
-              (:uint16 'encode-uint16-tag)
-              (:uint32 'encode-uint32-tag)
-              (:int8 'encode-int8-tag)
-              (:int16 'encode-int16-tag)
-              (:int32 'encode-int32-tag)
-              (:float 'encode-float-tag)))
+  (let ((encode-fn (ecase value-type
+                     (:char 'encode-char-tag)
+                     (:string 'encode-string-tag)
+                     (:hex 'encode-hex-tag)
+                     (:uint8 'encode-uint8-tag)
+                     (:uint16 'encode-uint16-tag)
+                     (:uint32 'encode-uint32-tag)
+                     (:int8 'encode-int8le)
+                     (:int16 'encode-int16le)
+                     (:int32 'encode-int32le)
+                     (:float 'encode-float32le)))
         (prefix (make-array 3 :element-type '(unsigned-byte 8)
                             :initial-contents
                             (loop
-                               with codes = (list (char-code #\:))
+                               with codes = (list (char-code (ecase value-type
+                                                               (:char #\A)
+                                                               (:string #\Z)
+                                                               (:hex #\H)
+                                                               (:uint8 #\C)
+                                                               (:uint16 #\S)
+                                                               (:uint32 #\I)
+                                                               (:int8 #\c)
+                                                               (:int16 #\s)
+                                                               (:int32 #\i)
+                                                               (:float #\f))))
                                for char across (reverse (symbol-name tag))
                                do (push (char-code char) codes)
                                finally (return codes)))))
@@ -44,7 +78,14 @@
        (defmethod encode-alignment-tag (value (tag (eql ,tag))
                                         alignment-record index)
          (let ((i (+ +tag-size+ 1 index)))
-           (,fn value (replace alignment-record ,prefix :start1 index) i)))
+           (,encode-fn
+            value (replace alignment-record ,prefix :start1 index) i)))
+       (defmethod alignment-tag-bytes ((tag (eql ,tag)) value)
+         ,(ecase value-type
+                 ((:char :int8 :uint8) 4)
+                 ((:int16 :uint16) 5)
+                 ((:int32 :uint32 :float) 7)
+                 ((:string :hex) '(+ 4 (length value))))) ; includes null byte
        (defmethod alignment-tag-documentation ((tag (eql ,tag)))
          (declare (ignore tag))
          ,docstring))))
@@ -125,6 +166,13 @@
 (define-alignment-tag :mq :int32
   "MAQ pair flag (MAQ specific).")
 
+;;; Various user tag extensions
+(define-alignment-tag :x0 :int32)
+(define-alignment-tag :x1 :int32)
+(define-alignment-tag :xg :int32)
+(define-alignment-tag :xm :int32)
+(define-alignment-tag :xO :int32)
+(define-alignment-tag :xt :char)
 
 (defun reference-id (alignment-record)
   "Returns the reference sequence identifier of ALIGNMENT-RECORD. This
@@ -350,7 +398,8 @@ described by ALIGNMENT-RECORD."
 
 (defun read-name (alignment-record)
   "Returns the read name string described by ALIGNMENT-RECORD."
-  (decode-read-name alignment-record (read-name-length alignment-record)))
+  (decode-read-name alignment-record 32
+                    (read-name-length alignment-record)))
 
 (defun alignment-cigar (alignment-record)
   "Returns the CIGAR record list of the alignment described by
@@ -434,30 +483,53 @@ alist. The primary purpose of this function is debugging."
                    (fails-platform-qc-p flag)
                    (pcr/optical-duplicate-p flag)))))
 
-(defun encode-alignment-core (core-list alignment-record)
-  (destructuring-bind (reference-id
-                       alignment-pos
-                       read-name-length
-                       mapping-quality
-                       alignment-bin
-                       cigar-length
-                       alignment-flag
-                       read-length
-                       mate-reference-id
-                       mate-alignment-position
-                       insert-length)
-      core-list
+(defun make-alignment-record (read-name seq-str alignment-flag
+                              &key (reference-id -1) alignment-pos
+                              (mate-reference-id -1) mate-alignment-pos
+                              (mapping-quality 0) (alignment-bin 0)
+                              (insert-length 0)
+                              cigar quality-str tag-values)
+  (let* ((i 32)
+         (j (+ i (1+ (length read-name))))
+         (k (+ j (if (null cigar)
+                     4
+                   (* 4 (length cigar)))))
+         (m (+ k (ceiling (length seq-str) 2)))
+         (n (+ m (if (null quality-str)
+                     1
+                   (length quality-str))))
+         (sizes (loop
+                   for (tag . value) in tag-values
+                   collect (alignment-tag-bytes tag value)))
+         (alignment-record (make-array (+ n (apply #'+ sizes))
+                                       :element-type '(unsigned-byte 8))))
     (encode-int32le reference-id alignment-record 0)
-    (encode-int32le (1- alignment-pos) alignment-record 4)
-    (encode-int8le read-name-length alignment-record 8)
+    (encode-int32le (if alignment-pos
+                        (1- alignment-pos)
+                      -1) alignment-record 4)
+    (encode-int8le (1+ (length read-name)) alignment-record 8)
     (encode-int8le mapping-quality alignment-record 9)
     (encode-int16le alignment-bin alignment-record 10)
-    (encode-int16le cigar-length alignment-record 12)
+    (encode-int16le (length cigar) alignment-record 12)
     (encode-int16le alignment-flag alignment-record 14)
-    (encode-int16le read-length alignment-record 16)
+    (encode-int16le (length seq-str) alignment-record 16)
     (encode-int32le mate-reference-id alignment-record 20)
-    (encode-int32le (1- mate-alignment-position) alignment-record 24)
-    (encode-int32le insert-length alignment-record 28)))
+    (encode-int32le (if mate-alignment-pos
+                        (1- mate-alignment-pos)
+                      -1) alignment-record 24)
+    (encode-int32le insert-length alignment-record 28)
+    (encode-read-name read-name alignment-record i)
+    (encode-cigar cigar alignment-record j)
+    (encode-seq-string seq-str alignment-record k)
+    (encode-quality-string quality-str alignment-record m)
+    (loop
+       for (tag . value) in tag-values
+       for size in sizes
+       with offset = n
+       do (progn
+            (encode-alignment-tag value tag alignment-record offset)
+            (incf offset size))
+       finally (return alignment-record))))
 
 (defun alignment-indices (alignment-record)
   "Returns 7 integer values which are byte-offsets within
@@ -474,27 +546,27 @@ spec."
     (values read-len cigar-index cigar-bytes seq-index seq-bytes
             qual-index tag-index)))
 
-(defun decode-read-name (alignment-record name-len)
+(defun decode-read-name (alignment-record index num-bytes)
   "Returns a string containing the template/read name of length
-NAME-LEN, encoded at byte 32 in ALIGNMENT-RECORD."
+NUM-BYTES, encoded at byte INDEX in ALIGNMENT-RECORD."
   ;; The read name is null terminated and the terminator is included
   ;; in the name length
-  (make-sb-string alignment-record 32 (- (+ 32 name-len) 2)))
+  (make-sb-string alignment-record index (- (+ index num-bytes) 2)))
 
-(defun encode-read-name (read-name alignment-record)
+(defun encode-read-name (read-name alignment-record index)
   (loop
      for i from 0 below (length read-name)
-     for j = (+ 32 i)
+     for j = index then (1+ j)
      do (setf (aref alignment-record j) (char-code (char read-name i)))
-     finally (setf (aref alignment-record (1+ i)) +null-byte+))
+     finally (setf (aref alignment-record (1+ j)) +null-byte+))
   alignment-record)
 
-(defun decode-seq-string (alignment-record index read-len)
+(defun decode-seq-string (alignment-record index num-bytes)
   "Returns a string containing the alignment query sequence of length
-READ-LEN. The sequence must be present in ALIGNMENT-RECORD at INDEX."
+NUM-BYTES. The sequence must be present in ALIGNMENT-RECORD at INDEX."
   (declare (optimize (speed 3)))
   (declare (type (simple-array (unsigned-byte 8) (*)) alignment-record)
-           (type (unsigned-byte 32) index read-len))
+           (type (unsigned-byte 32) index num-bytes))
   (flet ((decode-base (nibble)
            (ecase nibble
              (0 #\=)
@@ -504,8 +576,8 @@ READ-LEN. The sequence must be present in ALIGNMENT-RECORD at INDEX."
              (8 #\T)
              (15 #\N))))
     (loop
-       with seq = (make-array read-len :element-type 'base-char)
-       for i from 0 below read-len
+       with seq = (make-array num-bytes :element-type 'base-char)
+       for i from 0 below num-bytes
        for j of-type (unsigned-byte 32) = (+ index (floor i 2))
        do (setf (char seq i)
                 (decode-base (if (evenp i)
@@ -531,9 +603,9 @@ READ-LEN. The sequence must be present in ALIGNMENT-RECORD at INDEX."
             (setf (ldb (byte 4 0) (aref alignment-record j)) nibble))
        finally (return alignment-record))))
 
-(defun decode-quality-string (alignment-record index read-len)
+(defun decode-quality-string (alignment-record index num-bytes)
   "Returns a string containing the alignment query sequence of length
-READ-LEN. The sequence must be present in ALIGNMENT-RECORD at
+NUM-BYTES. The sequence must be present in ALIGNMENT-RECORD at
 INDEX. The SAM spec states that quality data are optional, with
 absence indicated by 0xff. If the first byte of quality data is 0xff,
 NIL is returned."
@@ -542,9 +614,9 @@ NIL is returned."
     (if (= #xff (aref alignment-record index))
         nil
       (loop
-         with str = (make-array read-len :element-type 'base-char)
-         for i from 0 below read-len
-         for j from index below (+ index read-len)
+         with str = (make-array num-bytes :element-type 'base-char)
+         for i from 0 below num-bytes
+         for j from index below (+ index num-bytes)
          do (setf (char str i)
                   (encode-phred (decode-uint8le alignment-record j)))
          finally (return str)))))
@@ -561,8 +633,8 @@ NIL is returned."
                            alignment-record j))))
   alignment-record)
 
-(defun decode-cigar (alignment-record index cigar-len)
-  "Returns a list of CIGAR operations from CIGAR-LEN bytes within
+(defun decode-cigar (alignment-record index num-bytes)
+  "Returns an alist of CIGAR operations from NUM-BYTES bytes within
 ALIGNMENT-RECORD, starting at INDEX."
   (flet ((decode-len (uint32)
            (ash uint32 -4))
@@ -576,7 +648,7 @@ ALIGNMENT-RECORD, starting at INDEX."
              (5 :h)
              (6 :p))))
     (loop
-       for i from index below (1- (+ index cigar-len)) by 4
+       for i from index below (1- (+ index num-bytes)) by 4
        collect (let ((x (decode-uint32le alignment-record i)))
                  (cons (decode-op x) (decode-len x))))))
 
@@ -593,7 +665,7 @@ ALIGNMENT-RECORD, starting at INDEX."
                                              (:p 6)))
              uint32)))
     (loop
-       for (op length) in cigar
+       for (op . length) in cigar
        for i = index then (+ 4 index)
        do (encode-int32le (encode-op-len op length) alignment-record i)
        finally (return alignment-record))))
@@ -646,33 +718,26 @@ INDEX. The BAM two-letter data keys are transformed to Lisp keywords."
                  (cons tag val)))))
 
 (defun encode-char-tag (value alignment-record index)
-  (assert (not (minusp value)) (value)
-          "~a was not an unsigned value" value)
-  (values (encode-int8le value alignment-record index) (+ 2 index)))
+  (encode-int8le (char-code value) alignment-record index))
 
 (defun encode-uint8-tag (value alignment-record index)
   (assert (not (minusp value)) (value)
-          "~a was not an unsigned value" value)
-  (values (encode-int8le value alignment-record index) (+ 2 index)))
+          "~a was not an unsigned byte" value)
+  (encode-int8le value alignment-record index))
 
 (defun encode-uint16-tag (value alignment-record index)
   (assert (not (minusp value)) (value)
-          "~a was not an unsigned value" value)
-  (values (encode-int16le value alignment-record index) (+ 3 index)))
+          "~a was not an unsigned 16-bit integer" value)
+  (encode-int16le value alignment-record index))
 
 (defun encode-uint32-tag (value alignment-record index)
   (assert (not (minusp value)) (value)
-          "~a was not an unsigned value" value)
-  (values (encode-int32le value alignment-record index) (+ 4 index)))
+          "~a was not an unsigned 32-bit integer" value)
+  (encode-int32le value alignment-record index))
 
-(defun encode-int16-tag (value alignment-record index)
-  (values (encode-int16le value alignment-record index) (+ 3 index)))
-
-(defun encode-int32-tag (value alignment-record index)
-  (values (encode-int32le value alignment-record index) (+ 4 index)))
-
-(defun encode-float-tag (value alignment-record index)
-  (values (encode-float32le value alignment-record index) (+ 4 index)))
+(defun encode-hex-tag (value alignment-record index)
+  (when (parse-integer value :radix 16))
+  (encode-string-tag value alignment-record index))
 
 (defun encode-string-tag (value alignment-record index)
   (let* ((len (length value))
@@ -682,7 +747,7 @@ INDEX. The BAM two-letter data keys are transformed to Lisp keywords."
        for j = index then (1+ j)
        do (setf (aref alignment-record j) (char-code (char value i)))
        finally (setf (aref alignment-record term-index) +null-byte+))
-    (values alignment-record (1+ term-index))))
+    alignment-record))
 
 (defun flag-validation-error (flag alignment-record msg)
   (let ((reference-id (reference-id alignment-record))

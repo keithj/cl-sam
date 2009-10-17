@@ -190,3 +190,32 @@
              do (write-alignment out aln)))))
     (test-binary-files in-filespec out-filespec)
     (delete-file out-filespec)))
+
+;; This test will fail because we do not choose the most compact
+;; integer representation at the moment. The BAM we generate is valid
+;; and is semantically, but not byte-for-byte, identical to the test
+;; set.
+(addtest (cl-sam-tests) bam-round-trip/2
+  (with-bgzf-file (bgzf (namestring (merge-pathnames "data/c1215.bam"))
+                        :direction :input)
+    (multiple-value-bind (header num-refs ref-meta)
+        (read-bam-meta bgzf)
+      (loop
+         for aln = (read-alignment bgzf)
+         while aln
+         do (let ((aln2 (make-alignment-record
+                         (read-name aln) (seq-string aln)
+                         (alignment-flag aln)
+                         :reference-id (reference-id aln)
+                         :alignment-pos (alignment-position aln)
+                         :mate-reference-id (mate-reference-id aln)
+                         :mate-alignment-pos (mate-alignment-position aln)
+                         :mapping-quality (mapping-quality aln)
+                         :alignment-bin (alignment-bin aln)
+                         :insert-length (insert-length aln)
+                         :cigar (alignment-cigar aln)
+                         :quality-str (quality-string aln)
+                         :tag-values (alignment-tag-values aln))))
+              (ensure (equalp aln aln2)
+                      :report "expected ~a but found ~a"
+                      :arguments (aln aln2)))))))

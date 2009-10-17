@@ -116,6 +116,10 @@
    #:alignment-core-alist
    #:alignment-flag-alist
 
+   #:make-alignment-record
+   #:define-alignment-tag
+   #:alignment-tag-documentation
+
    ;; Low-level SAM API
    #:make-sam-header
    #:merge-sam-headers
