@@ -191,10 +191,6 @@
     (test-binary-files in-filespec out-filespec)
     (delete-file out-filespec)))
 
-;; This test will fail because we do not choose the most compact
-;; integer representation at the moment. The BAM we generate is valid
-;; and is semantically, but not byte-for-byte, identical to the test
-;; set.
 (addtest (cl-sam-tests) bam-round-trip/2
   (with-bgzf-file (bgzf (namestring (merge-pathnames "data/c1215.bam"))
                         :direction :input)

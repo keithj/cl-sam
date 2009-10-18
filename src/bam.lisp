@@ -26,20 +26,12 @@
   (:documentation "Performs binary encoding of VALUE into VECTOR under
   TAG at INDEX, returning VECTOR."))
 
-(defgeneric alignment-tag-bytes (tag value)
-  (:documentation "Returns the size in bytes required to binary encode
-  VALUE under TAG."))
-
 (defgeneric alignment-tag-documentation (tag)
   (:documentation "Returns the documentation for TAG or NIL if none is
   available."))
 
 (defmethod encode-alignment-tag (value tag vector index)
   (declare (ignore value vector index))
-  (error "Unknown tag ~a." tag))
-
-(defmethod alignment-tag-bytes (tag value)
-  (declare (ignore value))
   (error "Unknown tag ~a." tag))
 
 (defmethod alignment-tag-documentation (tag)
@@ -50,42 +42,18 @@
                      (:char 'encode-char-tag)
                      (:string 'encode-string-tag)
                      (:hex 'encode-hex-tag)
-                     (:uint8 'encode-uint8-tag)
-                     (:uint16 'encode-uint16-tag)
-                     (:uint32 'encode-uint32-tag)
-                     (:int8 'encode-int8le)
-                     (:int16 'encode-int16le)
-                     (:int32 'encode-int32le)
-                     (:float 'encode-float32le)))
-        (prefix (make-array 3 :element-type '(unsigned-byte 8)
-                            :initial-contents
-                            (loop
-                               with codes = (list (char-code (ecase value-type
-                                                               (:char #\A)
-                                                               (:string #\Z)
-                                                               (:hex #\H)
-                                                               (:uint8 #\C)
-                                                               (:uint16 #\S)
-                                                               (:uint32 #\I)
-                                                               (:int8 #\c)
-                                                               (:int16 #\s)
-                                                               (:int32 #\i)
-                                                               (:float #\f))))
-                               for char across (reverse (symbol-name tag))
-                               do (push (char-code char) codes)
-                               finally (return codes)))))
+                     (:int32 'encode-int-tag)
+                     (:float 'encode-float-tag)))
+        (prefix (make-array 2 :element-type '(unsigned-byte 8)
+                            :initial-contents (loop
+                                                 for c across (symbol-name tag)
+                                                 collect (char-code c)))))
     `(progn
        (defmethod encode-alignment-tag (value (tag (eql ,tag))
                                         alignment-record index)
-         (let ((i (+ +tag-size+ 1 index)))
+         (let ((i (+ +tag-size+ index)))
            (,encode-fn
             value (replace alignment-record ,prefix :start1 index) i)))
-       (defmethod alignment-tag-bytes ((tag (eql ,tag)) value)
-         ,(ecase value-type
-                 ((:char :int8 :uint8) 4)
-                 ((:int16 :uint16) 5)
-                 ((:int32 :uint32 :float) 7)
-                 ((:string :hex) '(+ 4 (length value))))) ; includes null byte
        (defmethod alignment-tag-documentation ((tag (eql ,tag)))
          (declare (ignore tag))
          ,docstring))))
@@ -500,7 +468,7 @@ alist. The primary purpose of this function is debugging."
                    (length quality-str))))
          (sizes (loop
                    for (tag . value) in tag-values
-                   collect (alignment-tag-bytes tag value)))
+                   collect (alignment-tag-bytes value)))
          (alignment-record (make-array (+ n (apply #'+ sizes))
                                        :element-type '(unsigned-byte 8))))
     (encode-int32le reference-id alignment-record 0)
@@ -666,7 +634,7 @@ ALIGNMENT-RECORD, starting at INDEX."
              uint32)))
     (loop
        for (op . length) in cigar
-       for i = index then (+ 4 index)
+       for i = index then (+ 4 i)
        do (encode-int32le (encode-op-len op length) alignment-record i)
        finally (return alignment-record))))
 
@@ -717,29 +685,39 @@ INDEX. The BAM two-letter data keys are transformed to Lisp keywords."
                               (decode-int16le alignment-record val-index)))))
                  (cons tag val)))))
 
+;; BAM format is permitted to use more compact integer storage where
+;; possible
+(defun encode-int-tag (value alignment-record index)
+  (destructuring-bind (type-char encoder)
+      (etypecase value
+        ((integer 0 255)                  '(#\C encode-int8le))
+        ((integer -128 127)               '(#\c encode-int8le))
+        ((integer 0 65535)                '(#\S encode-int16le))
+        ((integer -32768 32767)           '(#\s encode-int16le))
+        ((integer -2147483648 2147483647) '(#\I encode-int32le))
+        ((integer 0 4294967295)           '(#\i encode-int32le)))
+    (setf (aref alignment-record index) (char-code type-char))
+    (funcall encoder value alignment-record (1+ index))))
+
+(defun encode-float-tag (value alignment-record index)
+  (setf (aref alignment-record index) (char-code #\f))
+  (encode-float32le value alignment-record (1+ index)))
+
 (defun encode-char-tag (value alignment-record index)
-  (encode-int8le (char-code value) alignment-record index))
-
-(defun encode-uint8-tag (value alignment-record index)
-  (assert (not (minusp value)) (value)
-          "~a was not an unsigned byte" value)
-  (encode-int8le value alignment-record index))
-
-(defun encode-uint16-tag (value alignment-record index)
-  (assert (not (minusp value)) (value)
-          "~a was not an unsigned 16-bit integer" value)
-  (encode-int16le value alignment-record index))
-
-(defun encode-uint32-tag (value alignment-record index)
-  (assert (not (minusp value)) (value)
-          "~a was not an unsigned 32-bit integer" value)
-  (encode-int32le value alignment-record index))
+  (setf (aref alignment-record index) (char-code #\A))
+  (encode-int8le (char-code value) alignment-record (1+ index)))
 
 (defun encode-hex-tag (value alignment-record index)
-  (when (parse-integer value :radix 16))
-  (encode-string-tag value alignment-record index))
+  (when (parse-integer value :radix 16)
+    (setf (aref alignment-record index) (char-code #\H))
+    (%encode-string-tag value alignment-record (1+ index)) ))
 
 (defun encode-string-tag (value alignment-record index)
+  (setf (aref alignment-record index) (char-code #\Z))
+  (%encode-string-tag value alignment-record (1+ index)))
+
+(declaim (inline %encode-string-tag))
+(defun %encode-string-tag (value alignment-record index)
   (let* ((len (length value))
          (term-index (+ index len)))
     (loop
@@ -748,6 +726,18 @@ INDEX. The BAM two-letter data keys are transformed to Lisp keywords."
        do (setf (aref alignment-record j) (char-code (char value i)))
        finally (setf (aref alignment-record term-index) +null-byte+))
     alignment-record))
+
+(defun alignment-tag-bytes (value)
+  (etypecase value
+    (character 4)
+    (string (+ 4 (length value)))       ; includes null byte
+    (single-float 7)
+    ((integer 0 255) 4)
+    ((integer -128 127) 4)
+    ((integer 0 65535) 5)
+    ((integer -32768 32767) 5)
+    ((integer -2147483648 2147483647) 7)
+    ((integer 0 4294967295) 7)))
 
 (defun flag-validation-error (flag alignment-record msg)
   (let ((reference-id (reference-id alignment-record))
