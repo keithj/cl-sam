@@ -16,6 +16,16 @@ The operations supported in this version are:
 Read      No    Yes
 Write     No    Yes
 
+cl-sam is able to create BAM records de novo and may be used to create
+a BAM file from scratch or edit a BAM stream. SAM/BAM header
+manipulation functions are included so that new headers may be created
+and headers from different BAM files may be systematically merged
+without redundancy or avoidable conflicts. Where conflicts are
+unavoidable, error conditions are raised to alert the user.
+
+Sorting operations are available using an external merge sort that is
+extensible by user-supplied sorting predicates.
+
 BAM read performance is roughly 0.5x the speed of SAMtools C
 implementation (SBCL 1.0.30 X86_64).
 
