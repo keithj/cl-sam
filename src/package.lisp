@@ -63,6 +63,7 @@
    #:read-reference-meta
    #:read-bam-meta
    #:read-alignment
+   #:read-bam-terminator
 
    ;; Low-level BAM writing API
    #:write-bam-magic
