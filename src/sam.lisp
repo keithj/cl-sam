@@ -280,6 +280,9 @@ value."
                                     (list record)))))))
 
 (defun find-duplicate-header-tags (record)
+  "Returns a list of duplicate SAM header tags found in RECORD. Each
+list element contains the tag, followed by a list of the conflicting
+values."
   ;; hash-table size reflects the maximum number of possible tags in a
   ;; record according to the SAM spec
   (let ((tags (header-record-tags record))

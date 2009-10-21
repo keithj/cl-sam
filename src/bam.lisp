@@ -38,6 +38,18 @@
   (error "Unknown tag ~a." tag))
 
 (defmacro define-alignment-tag (tag value-type &optional docstring)
+  "Defines a new alignment tag to hold a datum of a particular SAM
+type.
+
+Arguments:
+
+- tag (symbol): The tag e.g. :rg
+- value-type (symbol): The value type, one of :char , :string , :hex
+:int32 or :float .
+
+Optional:
+
+- docstring (string): Documentation for the tag."
   (let ((encode-fn (ecase value-type
                      (:char 'encode-char-tag)
                      (:string 'encode-string-tag)
@@ -457,6 +469,44 @@ alist. The primary purpose of this function is debugging."
                               (mapping-quality 0) (alignment-bin 0)
                               (insert-length 0)
                               cigar quality-str tag-values)
+  "Returns a new alignment record array.
+
+Arguments:
+
+- read-name (string): The read name.
+- seq-str (string): The read sequence.
+- alignment-flag (integer): The binary alignment flag.
+
+Key:
+
+- reference-id (integer): The reference identifier, defaults to -1
+- alignment-pos (integer): The 1-based alignment position, defaults to -1.
+- mate-reference-id (integer): The reference identifier of the mate,
+  defaults to -1.
+- mate-alignment-pos (integer): The 1-based alignment position of the mate.
+- mapping-quality (integer): The mapping quality, defaults to 0.
+- alignment-bin (integer): The alignment bin, defaults to 0.
+- insert-length (integer): The insert size, defaults to 0.
+- cigar (alist): The cigar represented as an alist of operations e.g.
+
+;;; '((:M . 9) (:I . 1) (:M . 25))
+
+- quality-str (string): The read quality string.
+- tag-values (alist): The alignment tags represented as an alist e.g.
+
+;;; '((:XT . #\U) (:NM . 1) (:X0 . 1) (:X1 . 0)
+;;;   (:XM . 1) (:XO . 0) (:XG . 0) (:MD . \"3T31\"))
+
+The tags must have been defined with {defmacro define-alignment-tag} .
+
+Returns:
+
+- A vector of '(unsigned-byte 8)."
+  (when (and quality-str (/= (length seq-str) (length quality-str)))
+    (error 'invalid-argument-error
+           :params '(seq-str quality-str)
+           :args (list seq-str quality-str)
+           :text "read sequence and quality strings were not the same length"))
   (let* ((i 32)
          (j (+ i (1+ (length read-name))))
          (k (+ j (if (null cigar)
@@ -522,6 +572,8 @@ NUM-BYTES, encoded at byte INDEX in ALIGNMENT-RECORD."
   (make-sb-string alignment-record index (- (+ index num-bytes) 2)))
 
 (defun encode-read-name (read-name alignment-record index)
+  "Returns ALIGNMENT-RECORD having encoded READ-NAME into it, starting
+at INDEX."
   (loop
      for i from 0 below (length read-name)
      for j = index then (1+ j)
@@ -554,6 +606,8 @@ NUM-BYTES. The sequence must be present in ALIGNMENT-RECORD at INDEX."
        finally (return seq))))
 
 (defun encode-seq-string (str alignment-record index)
+  "Returns ALIGNMENT-RECORD having encoded STR into it, starting at
+INDEX."
   (flet ((encode-base (char)
            (ecase (char-upcase char)
              (#\= 0)
@@ -590,6 +644,8 @@ NIL is returned."
          finally (return str)))))
 
 (defun encode-quality-string (str alignment-record index)
+  "Returns ALIGNMENT-RECORD having encoded READ-NAME into it, starting
+at INDEX."
   (flet ((decode-phred (x)
            (- (char-code x) 33)))
     (if (null str)
@@ -621,6 +677,8 @@ ALIGNMENT-RECORD, starting at INDEX."
                  (cons (decode-op x) (decode-len x))))))
 
 (defun encode-cigar (cigar alignment-record index)
+  "Returns ALIGNMENT-RECORD having encoded alist CIGAR into it,
+starting at INDEX."
   (flet ((encode-op-len (op len)
            (let ((uint32 (ash len 4)))
              (setf (ldb (byte 4 0) uint32) (ecase op
@@ -685,9 +743,10 @@ INDEX. The BAM two-letter data keys are transformed to Lisp keywords."
                               (decode-int16le alignment-record val-index)))))
                  (cons tag val)))))
 
-;; BAM format is permitted to use more compact integer storage where
-;; possible
 (defun encode-int-tag (value alignment-record index)
+  "Returns ALIGNMENT-RECORD having encoded integer VALUE into it,
+starting at INDEX. BAM format is permitted to use more compact integer
+storage where possible."
   (destructuring-bind (type-char encoder)
       (etypecase value
         ((integer 0 255)                  '(#\C encode-int8le))
@@ -700,19 +759,27 @@ INDEX. The BAM two-letter data keys are transformed to Lisp keywords."
     (funcall encoder value alignment-record (1+ index))))
 
 (defun encode-float-tag (value alignment-record index)
+  "Returns ALIGNMENT-RECORD having encoded float VALUE into it,
+starting at INDEX."
   (setf (aref alignment-record index) (char-code #\f))
   (encode-float32le value alignment-record (1+ index)))
 
 (defun encode-char-tag (value alignment-record index)
+  "Returns ALIGNMENT-RECORD having encoded character VALUE into it,
+starting at INDEX."
   (setf (aref alignment-record index) (char-code #\A))
   (encode-int8le (char-code value) alignment-record (1+ index)))
 
 (defun encode-hex-tag (value alignment-record index)
+  "Returns ALIGNMENT-RECORD having encoded hex string VALUE into it,
+starting at INDEX."
   (when (parse-integer value :radix 16)
     (setf (aref alignment-record index) (char-code #\H))
     (%encode-string-tag value alignment-record (1+ index)) ))
 
 (defun encode-string-tag (value alignment-record index)
+  "Returns ALIGNMENT-RECORD having encoded string VALUE into it,
+starting at INDEX."
   (setf (aref alignment-record index) (char-code #\Z))
   (%encode-string-tag value alignment-record (1+ index)))
 
@@ -728,6 +795,7 @@ INDEX. The BAM two-letter data keys are transformed to Lisp keywords."
     alignment-record))
 
 (defun alignment-tag-bytes (value)
+  "Returns the number of bytes required to encode VALUE."
   (etypecase value
     (character 4)
     (string (+ 4 (length value)))       ; includes null byte
@@ -739,7 +807,9 @@ INDEX. The BAM two-letter data keys are transformed to Lisp keywords."
     ((integer -2147483648 2147483647) 7)
     ((integer 0 4294967295) 7)))
 
-(defun flag-validation-error (flag alignment-record msg)
+(defun flag-validation-error (flag alignment-record message)
+  "Raised a {define-condition malformed-field-error} for alignment
+FLAG in ALIGNMENT-RECORD, with MESSAGE."
   (let ((reference-id (reference-id alignment-record))
         (read-name (read-name alignment-record))
         (pos (alignment-position alignment-record)))
@@ -747,4 +817,4 @@ INDEX. The BAM two-letter data keys are transformed to Lisp keywords."
          :field flag
          :text (format nil (txt "invalid flag ~b set for read ~s at ~a"
                                 "in reference ~d: ~a")
-                       flag read-name pos reference-id msg))))
+                       flag read-name pos reference-id message))))
