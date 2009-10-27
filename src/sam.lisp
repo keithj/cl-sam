@@ -19,22 +19,27 @@
 
 (in-package :sam)
 
+(defparameter *valid-header-types* '(:hd :sq :rg :pg)
+  "A list of valid SAM header types.")
 (defparameter *mandatory-header-tags*
-  (pairlis '(:hd :sq :rg :pg)
-           '((:vn) (:sn :ln) (:id :sm) (:id)))
+  (pairlis *valid-header-types* '((:vn) (:sn :ln) (:id :sm) (:id)))
   "A mapping that describes the mandatory tags for each SAM header
   record type.")
-
 (defparameter *valid-header-tags*
-  (pairlis '(:hd :sq :rg :pg)
-           '((:vn :so :go)
-             (:sn :ln :as :m5 :ur :sp)
-             (:id :sm :lb :ds :pu :pi :cn :dt :pl)
-             (:id :vn :cl))))
+  (pairlis *valid-header-types* '((:vn :so :go)
+                                  (:sn :ln :as :m5 :ur :sp)
+                                  (:id :sm :lb :ds :pu :pi :cn :dt :pl)
+                                  (:id :vn :cl)))
+  "A mapping that describes the valid tags for each SAM header record
+  type.")
+(defparameter *valid-sort-orders* '(:unsorted :coordinate :queryname)
+  "Valid values for SAM sort order tags.")
+(defparameter *valid-group-orders* '(:none :query :reference)
+  "Valid values for SAM group order tags.")
 
-(defmacro define-header-tag-parser (name (record-type var) tag-specs)
+(defmacro define-header-tag-parser (name (header-type var) tag-specs)
   "Defines a tag parsing function NAME that parses tag values for SAM
-header RECORD-TYPE."
+header HEADER-TYPE."
   `(progn
     (defun ,name (str)
       (unless (and (< 3 (length str))
@@ -52,7 +57,7 @@ header RECORD-TYPE."
               (t
                (error 'malformed-field-error :field str
                       :text (format nil "invalid ~a tag ~a"
-                                    ,record-type tag))))))))
+                                    ,header-type tag))))))))
 
 (define-header-tag-parser parse-hd-tag ("HD" value)
   (("VN" :vn)
@@ -104,64 +109,74 @@ thus the list's first element is a keyword describing the record type
 and the rest of the list is itself an alist of record keys and values."
   (flet ((tags (fn)
            (mapcar fn (rest (string-split str #\Tab)))))
-    (cond ((starts-with-string-p str "@HD")
-           (cons :hd (tags #'parse-hd-tag)))
-          ((starts-with-string-p str "@SQ")
-           (cons :sq (tags #'parse-sq-tag)))
-          ((starts-with-string-p str "@RG")
-           (cons :rg (tags #'parse-rg-tag)))
-          ((starts-with-string-p str "@PG")
-           (cons :pg (tags #'parse-pg-tag)))
-          (t
-           (error 'malformed-record-error
-                  :record str
-                  :text "invalid SAM header record")))))
+    (let ((record (cond ((or (< (length str) 4) ; 3 type chars, 1 tab char
+                             (char/= #\@ (char str 0))
+                             (char/= #\Tab (char str 3)))
+                         (error 'malformed-record-error
+                                :record str
+                                :text "invalid aSAM header record"))
+                        ((starts-with-string-p str "@HD")
+                         (cons :hd (tags #'parse-hd-tag)))
+                        ((starts-with-string-p str "@SQ")
+                         (cons :sq (tags #'parse-sq-tag)))
+                        ((starts-with-string-p str "@RG")
+                         (cons :rg (tags #'parse-rg-tag)))
+                        ((starts-with-string-p str "@PG")
+                         (cons :pg (tags #'parse-pg-tag)))
+                        (t
+                         (error 'malformed-record-error
+                                :record str
+                                :text "invalid SAM header record type")))))
+      ;; This is belt-and-braces because the parser already rejects
+      ;; invalid tags
+      (ensure-valid-header-tags (ensure-mandatory-header-tags record)))))
 
-(defun header-record-type (record)
-  "Returns a symbol indicating the record-type of HEADER-RECORD, being
+(defun header-type (record)
+  "Returns a symbol indicating the header-type of HEADER-RECORD, being
 one of :HD , :SQ , :RG or :PG ."
   (first record))
 
-(defun header-record-tags (record)
+(defun header-tags (record)
   "Returns an alist of the tag-values of HEADER-RECORD."
   (rest record))
 
-(defun mandatory-tags (record-type)
+(defun mandatory-header-tags (header-type)
   "Returns a list of the mandatory tags for SAM header
-RECORD-TYPE. Both RECORD-TYPE. and the returned tags are represented
+HEADER-TYPE. Both HEADER-TYPE. and the returned tags are represented
 as symbols."
-  (rest (assoc record-type *mandatory-header-tags*)))
+  (rest (assoc header-type *mandatory-header-tags*)))
+
+(defun valid-header-tags (header-type)
+  "Returns a list of the valid tags for SAM header HEADER-TYPE. Both
+HEADER-TYPE and the returned tags are represented as symbols."
+  (rest (assoc header-type *valid-header-tags*)))
 
 (defun ensure-mandatory-header-tags (record)
   "Returns HEADER-RECORD if all mandatory tags are present, or raises
 a {define-condition malformed-record-error} ."
-  (let ((tag-type (header-record-type record))
-        (tags (header-record-tags record)))
-    (unless (subsetp (mandatory-tags tag-type) (mapcar #'first tags))
+  (let* ((header-type (header-type record))
+         (tags (header-tags record))
+         (mandatory (mandatory-header-tags header-type)))
+    (unless (and mandatory (subsetp mandatory (mapcar #'first tags)))
       (error 'malformed-record-error
              :record record
-             :text (let ((diff (set-difference (mandatory-tags tag-type)
+             :text (let ((diff (set-difference mandatory
                                                (mapcar #'first tags))))
                      (format nil "~r missing mandatory tag~:p ~a"
                              (length diff) diff))))
     record))
 
-(defun valid-header-tags (record-type)
-  "Returns a list of the valid tags for SAM header RECORD-TYPE. Both
-RECORD-TYPE and the returned tags are represented as symbols."
-  (rest (assoc record-type *valid-header-tags*)))
-
 (defun ensure-valid-header-tags (record)
   "Checks list HEADER-RECORD for tag validity and returns
 HEADER-RECORD or raises a {define-condition malformed-record-error} if
 invalid tags are present."
-  (let ((tag-type (header-record-type record))
-        (tags (header-record-tags record)))
-    (unless (subsetp (valid-header-tags tag-type) (mapcar #'first tags))
+  (let* ((header-type (header-type record))
+         (tags (header-tags record))
+         (valid (valid-header-tags header-type)))
+    (unless (subsetp (mapcar #'first tags) valid)
       (error 'malformed-record-error
              :record record
-             :text (let ((diff (set-difference (mapcar #'first tags)
-                                               (valid-header-tags tag-type))))
+             :text (let ((diff (set-difference (mapcar #'first tags) valid)))
                      (format nil "~r invalid tag~:p ~a"
                              (length diff) diff))))
     record))
@@ -169,19 +184,18 @@ invalid tags are present."
 (defun merge-header-records (record1 record2)
   "Returns a new header record created by merging the tags of
 header-records RECORD1 and RECORD2. Records may be safely merged if
-they have the same record-type and do not contain any conflicting tag
+they have the same header-type and do not contain any conflicting tag
 values."
-  (unless (eql (header-record-type record1) (header-record-type record2))
+  (unless (eql (header-type record1) (header-type record2))
     (error 'invalid-operation-error
            :text (format nil
                          "invalid merge caused by different record-types in ~a"
                          (list record1 record2))))
-  (let* ((merged (cons (header-record-type record1)
-                       (remove-duplicates
-                        (concatenate 'list
-                                     (header-record-tags record1)
-                                     (header-record-tags record2))
-                        :test #'equalp)))
+  (let* ((merged (cons (header-type record1)
+                       (remove-duplicates (concatenate 'list
+                                                       (header-tags record1)
+                                                       (header-tags record2))
+                                          :test #'equalp)))
          (clashes (find-duplicate-header-tags merged)))
     (when clashes
       (error 'invalid-operation-error
@@ -213,9 +227,17 @@ describing the record type. The rest of each list is itself an alist
 of record keys and values."
   (with-input-from-string (s str)
     (loop
-       for rec = (read-line s nil nil)
-       while rec
-       collect (make-header-record rec))))
+       for line = (read-line s nil nil)
+       while line
+       for (header-type . tags) = (make-header-record line)
+       collect (let* ((tags (remove-duplicates tags :test #'equal))
+                      (clashes (find-duplicate-header-tags tags))
+                      (record (cons header-type tags)))
+                 (when clashes
+                   (error 'malformed-record-error
+                          :record record
+                          :text (format nil "clashing tags ~a" clashes)))
+                 record))))
 
 (defun merge-sam-headers (&rest headers)
   "Returns a new SAM header that is the result of merging
@@ -230,21 +252,60 @@ records contain conflicting tag values once merged."
                       (simplify-records rg :id)
                       (simplify-records pg :id)))))
 
+(defun subst-sort-order (header order)
+  "Returns a copy of HEADER with any sort order tag initially present
+substituted by ORDER, which must be one of the valid SAM sort orders."
+  (assert (member order *valid-sort-orders*) (order)
+          "Invalid sort order ~a: expected one of ~a" order
+          *valid-sort-orders*)
+  (let* ((sorted (ensure-order header :sort))
+         (current (assoc :so (assocdr :hd sorted))))
+    (subst (cons :so order) current sorted)))
+
+(defun subst-group-order (header order)
+  "Returns a copy of HEADER with any group order tag initially present
+substituted by ORDER, which must be one of the valid SAM sort orders."
+  (assert (member order *valid-group-orders*) (order)
+          "Invalid group order ~a: expected one of ~a" order
+          *valid-group-orders*)
+  (let* ((sorted (ensure-order header :group))
+         (current (assoc :go (assocdr :hd sorted))))
+    (subst (cons :go order) current sorted)))
+
+;;; SAM spec is silent on whether order within a record is
+;;; important. For now we use acons and change the order because the
+;;; spec doesn't forbid it.
+(defun ensure-order (header domain)
+  "Returns a copy of HEADER that is guaranteed to contain a sort tag
+for DOMAIN, which must be one of :sort or :group ."
+  (let ((hd (or (assoc :hd header)
+                (list :hd (cons :vn "1.0")))) ; Default if :HD is absent
+        (tag (ecase domain
+               (:sort :so)
+               (:group :go)))
+        (value (ecase domain
+               (:sort :unsorted)
+               (:group :none))))
+    (if (find tag (rest hd) :key #'car)
+        header
+      (subst (cons :hd (acons tag value (rest hd)))
+             hd header :test #'equal))))
+
 (defun partition-by-type (headers)
-  "Collects all the header-records in HEADERS by record-type, sorts
+  "Collects all the header-records in HEADERS by header-type, sorts
 them and returns 4 values that are lists of the collected :hd , :sq
 , :rg and :pg header-records, respectively. Does not modify HEADERS."
   (flet ((sort-records (records tag)
            (stable-sort records #'string<
                         :key (lambda (x)
-                               (assocdr tag (header-record-tags x))))))
+                               (assocdr tag (header-tags x))))))
     (let (hd sq rg pg)
       (dolist (header headers (values (nreverse hd)
                                       (sort-records sq :sn)
                                       (sort-records rg :id)
                                       (sort-records pg :id)))
         (dolist (record header)
-          (ecase (header-record-type record)
+          (ecase (header-type record)
             (:hd (push record hd))
             (:sq (push record sq))
             (:rg (push record rg))
@@ -259,7 +320,7 @@ header-records that share that ID-TAG value."
          (groups (group-by-id unique id-tag))
          (simplified ()))
     (dolist (record unique (nreverse simplified))
-      (let* ((id (assocdr id-tag (header-record-tags record)))
+      (let* ((id (assocdr id-tag (header-tags record)))
              (group (gethash id groups)))
         (if (endp (rest group))
             (push (first group) simplified)
@@ -273,7 +334,7 @@ hash-table values are lists of header-records that share that ID-TAG
 value."
   (let ((groups (make-hash-table :test #'equalp)))
     (dolist (record records groups)
-      (let* ((id (assocdr id-tag (header-record-tags record)))
+      (let* ((id (assocdr id-tag (header-tags record)))
              (group (gethash id groups)))
         (setf (gethash id groups) (if group
                                       (cons record group)
@@ -285,7 +346,7 @@ list element contains the tag, followed by a list of the conflicting
 values."
   ;; hash-table size reflects the maximum number of possible tags in a
   ;; record according to the SAM spec
-  (let ((tags (header-record-tags record))
+  (let ((tags (header-tags record))
         (duplicates (make-hash-table :size 10)))
     (loop
        for (tag . val) in tags
