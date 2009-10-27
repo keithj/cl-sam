@@ -21,8 +21,8 @@
 
 (defun canonical-header (header)
   (mapcar (lambda (record)
-            (cons (header-record-type record)
-                  (sort (header-record-tags record) #'string<
+            (cons (header-type record)
+                  (sort (header-tags record) #'string<
                         :key (lambda (x)
                                (symbol-name (first x))))))
           (copy-tree header)))
@@ -94,3 +94,39 @@
 @SQ	SN:AL096846	LN:6490	SP:Schizosaccharomyces pombe")))
     (ensure (equalp (canonical-header expected)
                     (canonical-header result)))))
+
+(addtest (cl-sam-tests) make-sam-header/2 ; clashes
+  (ensure-condition malformed-record-error
+    (make-sam-header "@SQ	SN:AL096846	LN:6490	LN:9999"))) 
+
+(addtest (cl-sam-tests) make-sam-header/3 ; duplicates
+  (ensure (equalp '((:HD (:VN . "1.0") (:SO . :coordinate)))
+                  (make-sam-header
+                   "@HD	VN:1.0	SO:coordinate	SO:coordinate"))))
+
+(addtest (cl-sam-tests) subst-sort-order/1
+  (ensure (equalp (canonical-header '((:HD (:VN . "1.0") (:SO . :coordinate))))
+                  (canonical-header
+                   (subst-sort-order (make-sam-header "@HD	VN:1.0")
+                                     :coordinate)))))
+
+(addtest (cl-sam-tests) subst-sort-order/2
+  (ensure (equalp
+           (canonical-header '((:HD (:VN . "1.0") (:SO . :coordinate))))
+           (canonical-header (subst-sort-order
+                              (make-sam-header "@HD	VN:1.0	SO:unsorted")
+                              :coordinate)))))
+
+(addtest (cl-sam-tests) subst-group-order/1
+  (ensure (equalp (canonical-header '((:HD (:VN . "1.0") (:GO . :none))))
+                  (canonical-header
+                   (subst-group-order (make-sam-header "@HD	VN:1.0")
+                                      :none)))))
+
+(addtest (cl-sam-tests) subst-group-order/2
+  (ensure (equalp
+           (canonical-header '((:HD (:VN . "1.0") (:GO . :reference))))
+           (canonical-header (subst-group-order
+                              (make-sam-header "@HD	VN:1.0	GO:none")
+                              :reference)))))
+
