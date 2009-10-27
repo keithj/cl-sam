@@ -123,13 +123,17 @@
 
    ;; Low-level SAM API
    #:make-sam-header
-   #:merge-sam-headers
    #:make-header-record
-   #:header-record-type
-   #:header-record-tags
+   #:header-type
+   #:header-tags
    #:ensure-mandatory-header-tags
    #:ensure-valid-header-tags
-   #:merge-header-records)
+
+   ;; SAM header editing
+   #:merge-sam-headers
+   #:merge-header-records
+   #:subst-sort-order
+   #:subst-group-order)
   (:documentation "cl-sam is a Common Lisp toolkit for manipulation of
 DNA sequence alignment data stored in the Sequence Alignment/Map (SAM)
 format <http://samtools.sourceforge.net>. It is meant to be used in
