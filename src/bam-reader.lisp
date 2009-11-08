@@ -19,7 +19,8 @@
 
 (in-package :sam)
 
-(defconstant +bam-magic+ #(66 65 77 1)
+(defconstant +bam-magic+ (make-array 4 :element-type '(unsigned-byte 8)
+                                     :initial-contents '(66 65 77 1))
   "The BAM file magic header bytes.")
 (defconstant +null-byte+ #x00
   "The termination byte for BAM strings.")
