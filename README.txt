@@ -5,17 +5,6 @@ alignment data stored in the Sequence Alignment/Map (SAM) format
 <http://samtools.sourceforge.net>. It is meant to be used in
 conjunction with the SAMtools C toolkit.
 
-The SAM specficiation describes text (SAM) and binary (BAM)
-formats. cl-sam originated as a small set of functions for exploring
-example BAM files and therefore provides only a subset of possible
-SAM/BAM read/write operations.
-
-The operations supported in this version are:
-
-         SAM    BAM
-Read      No    Yes
-Write     No    Yes
-
 cl-sam is able to create BAM records de novo and may be used to create
 a BAM file from scratch or edit a BAM stream. SAM/BAM header
 manipulation functions are included so that new headers may be created
@@ -23,15 +12,26 @@ and headers from different BAM files may be systematically merged
 without redundancy or avoidable conflicts. Where conflicts are
 unavoidable, error conditions are raised to alert the user.
 
+The operations supported in this version are:
+
+         SAM    BAM
+Read      No    Yes
+Write     No    Yes
+
 Sorting operations are available using an external merge sort that is
 extensible by user-supplied sorting predicates. Typical sort
 performance on SBCL is close to that of samtools 0.16 (coordinate sort
-of the same 350 Mb file, average of 3 runs):
+of the same 350 Mb BAM file, average of 3 runs):
 
-                  samtools C sort   169 sec
+                                       samtools C sort      169 sec
+Picard MergeSamFiles (IcedTea Java 1.6 server, 64 bit)      188 sec
 
-cl-sam       (SBCL 1.0.32, 64-bit)  174 sec
-cl-sam    (Clozure CL 1.3, 64-bit)  235 sec
+                          cl-sam (SBCL 1.0.32, 64-bit)      167 sec [1]
+                                                            213 sec [2]
+                       cl-sam (Clozure CL 1.3, 64-bit)      235 sec
+
+[1] Timing taken immediately after a full GC.
+[2] Timing taken immediately after sorting another, identical file.
 
 
 Installation
