@@ -254,7 +254,8 @@ records contain conflicting tag values once merged."
 
 (defun subst-sort-order (header order)
   "Returns a copy of HEADER with any sort order tag initially present
-substituted by ORDER, which must be one of the valid SAM sort orders."
+substituted by symbol ORDER, which must be one of the valid SAM sort
+orders."
   (assert (member order *valid-sort-orders*) (order)
           "Invalid sort order ~a: expected one of ~a" order
           *valid-sort-orders*)
@@ -264,7 +265,8 @@ substituted by ORDER, which must be one of the valid SAM sort orders."
 
 (defun subst-group-order (header order)
   "Returns a copy of HEADER with any group order tag initially present
-substituted by ORDER, which must be one of the valid SAM sort orders."
+substituted by symbol ORDER, which must be one of the valid SAM sort
+orders."
   (assert (member order *valid-group-orders*) (order)
           "Invalid group order ~a: expected one of ~a" order
           *valid-group-orders*)
@@ -286,10 +288,13 @@ for DOMAIN, which must be one of :sort or :group ."
         (value (ecase domain
                (:sort :unsorted)
                (:group :none))))
-    (if (find tag (rest hd) :key #'car)
-        header
-      (subst (cons :hd (acons tag value (rest hd)))
-             hd header :test #'equal))))
+    (cond ((null header)
+           (list hd))
+          ((find tag (rest hd) :key #'car)
+           header)
+          (t
+           (subst (cons :hd (acons tag value (rest hd)))
+                  hd header :test #'equal)))))
 
 (defun partition-by-type (headers)
   "Collects all the header-records in HEADERS by header-type, sorts
