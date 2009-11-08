@@ -42,30 +42,31 @@
 
 (defmethod make-merge-stream ((stream bam-sort-input-stream) predicate
                               &key key (buffer-size 100000))
-  (let ((out (open (make-tmp-pathname :basename "bam-merge-sort")
-                   :direction :io
-                   :element-type '(unsigned-byte 8)))
-        (alignments (make-array buffer-size :adjustable t :fill-pointer 0)))
-    (declare (type (vector (simple-array (unsigned-byte 8))) alignments))
+  (let ((alignments (make-array buffer-size :adjustable t :fill-pointer 0)))
     (loop
        for i from 0 below buffer-size
        for alignment = (stream-read-element stream)
        while alignment
        do (vector-push alignment alignments))
     (cond ((plusp (length alignments))
-           (loop
-              with alen-bytes = (make-array 4 :element-type '(unsigned-byte 8))
-              for alignment across (sort alignments predicate :key key)
-              do (progn
-                   (encode-int32le (length alignment) alen-bytes)
-                   (write-sequence alen-bytes out)
-                   (write-sequence alignment out))
-              finally (if (file-position out 0)
-                          (return
-                            (make-instance 'bam-merge-stream :stream out))
-                        (error 'file-error :pathname out))))
+           (let ((alignments (stable-sort alignments predicate :key key)))
+             (loop
+                with out = (open (make-tmp-pathname :basename "bam-merge-sort")
+                                 :direction :io
+                                 :element-type '(unsigned-byte 8))
+                with alen-bytes = (make-array 4
+                                              :element-type '(unsigned-byte 8))
+                for alignment across alignments
+                do (progn
+                     (encode-int32le (length alignment) alen-bytes)
+                     (write-sequence alen-bytes out)
+                     (write-sequence alignment out))
+                finally (cond ((file-position out 0)
+                               (return (make-instance 'bam-merge-stream
+                                                      :stream out)))
+                              (t
+                               (error 'file-error :pathname out))))))
           (t
-           (close out :abort t)
            nil))))
 
 (defmethod initialize-instance :after ((stream bam-merge-stream) &key)
@@ -78,11 +79,8 @@
       stream
     (setf h (%read-bam-alignment s))))
 
-(defun alignment-position< (alignment-record1 alignment-record2)
-  (< (alignment-position alignment-record1)
-     (alignment-position alignment-record2)))
-
-(defun bam-alignment-position< (alignment-record1 alignment-record2)
+(declaim (inline alignment-record<))
+(defun alignment-record< (alignment-record1 alignment-record2)
   (declare (optimize (speed 3)))
   (let ((ref1 (reference-id alignment-record1))
         (ref2 (reference-id alignment-record2)))
@@ -92,24 +90,63 @@
           ((minusp ref2) ; unmapped read
            t)
           ((= ref1 ref2)
-           (alignment-position< alignment-record1 alignment-record2))
+           (let ((pos1 (alignment-position alignment-record1))
+                 (pos2 (alignment-position alignment-record2)))
+             (declare (type int32 pos1 pos2))
+             (or (< pos1 pos2)
+                 (and (= pos1 pos2)
+                      (alignment-strand<
+                       alignment-record1 alignment-record2)))))
           (t
            (< ref1 ref2)))))
 
-;; FIXME -- edit the header to include proper sort metadata
-(defun sort-bam-file (in-filespec out-filespec predicate
-                      &key key (buffer-size 5000000))
-  (with-bgzf-file (bgzf-in (namestring in-filespec) :direction :input)
-    (with-bgzf-file (bgzf-out (namestring out-filespec) :direction :output)
+(declaim (inline alignment-name<))
+(defun alignment-name< (alignment-record1 alignment-record2)
+  (declare (optimize (speed 3)))
+  (let ((name1 (read-name alignment-record1))
+        (name2 (read-name alignment-record2)))
+    (declare (type simple-base-string name1 name2))
+    (or (string< name1 name2)
+        (and (string= name1 name2)
+             (let ((pos1 (alignment-position alignment-record1))
+                   (pos2 (alignment-position alignment-record2)))
+               (declare (type int32 pos1 pos2))
+               (or (< pos1 pos2)
+                   (and (= pos1 pos2)
+                        (alignment-strand<
+                         alignment-record1 alignment-record2))))))))
+
+(declaim (inline alignment-strand<))
+(defun alignment-strand< (alignment-record1 alignment-record2)
+  (declare (optimize (speed 3)))
+  (and (query-forward-p (alignment-flag alignment-record1))
+       (query-reverse-p (alignment-flag alignment-record2))))
+
+(defun sort-bam-file (in-filespec out-filespec
+                      &key (sort-order :coordinate) (buffer-size 1000000))
+  (with-bgzf-file (bgzf-in (pathstring in-filespec) :direction :input)
+    (with-bgzf-file (bgzf-out (pathstring out-filespec) :direction :output)
       (multiple-value-bind (header num-refs ref-meta)
           (read-bam-meta bgzf-in)
-        (write-bam-meta bgzf-out header num-refs ref-meta)
-        (let ((sort-in (make-instance 'bam-sort-input-stream :bgzf bgzf-in))
-              (sort-out (make-instance 'bam-sort-output-stream :bgzf bgzf-out)))
-          (external-merge-sort sort-in sort-out predicate
-                               :key key :buffer-size buffer-size))))))
+        (let ((predicate (ecase sort-order
+                           (:coordinate #'alignment-record<)
+                           (:queryname #'alignment-name<)))
+              (header-str (make-header-string
+                           (subst-sort-order
+                            (ensure-order header :sort) sort-order))))
+          (write-bam-meta bgzf-out header-str num-refs ref-meta)
+          (sort-bam-alignments bgzf-in bgzf-out predicate
+                               :buffer-size buffer-size))))))
+
+(defun sort-bam-alignments (bgzf-in bgzf-out predicate
+                            &key key (buffer-size 1000000))
+  (let ((sort-in (make-instance 'bam-sort-input-stream :bgzf bgzf-in))
+        (sort-out (make-instance 'bam-sort-output-stream :bgzf bgzf-out)))
+    (external-merge-sort sort-in sort-out predicate
+                         :key key :buffer-size buffer-size)))
 
 (defun %read-bam-alignment (stream)
+  (declare (optimize (speed 3)))
   (let ((alen-bytes (make-array 4 :element-type '(unsigned-byte 8))))
     (if (zerop (read-sequence alen-bytes stream))
         nil
