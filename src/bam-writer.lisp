@@ -62,6 +62,8 @@ of length REF-LENGTH bases, to handle BGZF."
 (defun write-alignment (bgzf alignment-record)
   "Writes one ALIGNMENT-RECORD to handle BGZF and returns the number
 of bytes written."
+  (declare (optimize (speed 3)))
+  (declare (type (simple-array (unsigned-byte 8) (*)) alignment-record))
   (let ((alen (length alignment-record))
         (alen-bytes (make-array 4 :element-type '(unsigned-byte 8))))
     (encode-int32le alen alen-bytes)
@@ -79,5 +81,5 @@ the number of bytes written."
      (write-bam-header bgzf header)
      (write-num-references bgzf num-refs)
      (loop
-        for (ref-id ref-name ref-length) in ref-meta
+        for (nil ref-name ref-length) in ref-meta
         sum (write-reference-meta bgzf ref-name ref-length))))

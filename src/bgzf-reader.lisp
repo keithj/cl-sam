@@ -71,7 +71,7 @@ Key:
 Returns:
 
 - A BGZF structure."
-  (let ((ptr (bgzf-ffi:bgzf-open (namestring filespec) (ecase direction
+  (let ((ptr (bgzf-ffi:bgzf-open (pathstring filespec) (ecase direction
                                                          (:input "r")
                                                          (:output "w")))))
     (when (null-pointer-p ptr)
@@ -133,11 +133,11 @@ Returns:
   "Reads N bytes from the handle BGZF and returns them as a Lisp array
 of unsigned-byte 8. If fewer than N bytes are available an a
 {define-condition bgzf-read-error} is raised."
-  (declare (optimize (speed 3) (safety 0)))
+  (declare (optimize (speed 3)))
   (declare (type fixnum n))
   (with-foreign-object (array-ptr :unsigned-char n)
     (let ((num-read (bgzf-ffi:bgzf-read (bgzf-ptr bgzf) array-ptr n))
-          (msg  "expected to read ~a bytes but ~a were available"))
+          (msg "expected to read ~a bytes but ~a were available"))
       (declare (type fixnum num-read))
       (cond ((zerop num-read)
              nil)

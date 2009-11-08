@@ -22,6 +22,9 @@
 (defconstant +tag-size+ 2
   "The size of a BAM auxilliary tag in bytes.")
 
+(deftype bam-alignment ()
+  '(simple-array (unsigned-byte 8) (*)))
+
 (defgeneric encode-alignment-tag (value tag vector index)
   (:documentation "Performs binary encoding of VALUE into VECTOR under
   TAG at INDEX, returning VECTOR."))
@@ -143,7 +146,7 @@ Optional:
        "than as a read pair."))
 (define-alignment-tag :am :int32
   "Smaller single-end mapping quality of the two reads in a pair.")
-(define-alignment-tag :mq :int32
+(define-alignment-tag :mf :int32
   "MAQ pair flag (MAQ specific).")
 
 ;;; Various user tag extensions
@@ -154,12 +157,149 @@ Optional:
 (define-alignment-tag :xO :int32)
 (define-alignment-tag :xt :char)
 
+(defun make-alignment-record (read-name seq-str alignment-flag
+                              &key (reference-id -1) alignment-pos
+                              (mate-reference-id -1) mate-alignment-pos
+                              (mapping-quality 0) (alignment-bin 0)
+                              (insert-length 0)
+                              cigar quality-str tag-values)
+  "Returns a new alignment record array.
+
+Arguments:
+
+- read-name (string): The read name.
+- seq-str (string): The read sequence.
+- alignment-flag (integer): The binary alignment flag.
+
+Key:
+
+- reference-id (integer): The reference identifier, defaults to -1
+- alignment-pos (integer): The 1-based alignment position, defaults to -1.
+- mate-reference-id (integer): The reference identifier of the mate,
+  defaults to -1.
+- mate-alignment-pos (integer): The 1-based alignment position of the mate.
+- mapping-quality (integer): The mapping quality, defaults to 0.
+- alignment-bin (integer): The alignment bin, defaults to 0.
+- insert-length (integer): The insert size, defaults to 0.
+- cigar (alist): The cigar represented as an alist of operations e.g.
+
+;;; '((:M . 9) (:I . 1) (:M . 25))
+
+- quality-str (string): The read quality string.
+- tag-values (alist): The alignment tags represented as an alist e.g.
+
+;;; '((:XT . #\U) (:NM . 1) (:X0 . 1) (:X1 . 0)
+;;;   (:XM . 1) (:XO . 0) (:XG . 0) (:MD . \"3T31\"))
+
+The tags must have been defined with {defmacro define-alignment-tag} .
+
+Returns:
+
+- A vector of '(unsigned-byte 8)."
+  (when (and quality-str (/= (length seq-str) (length quality-str)))
+    (error 'invalid-argument-error
+           :params '(seq-str quality-str)
+           :args (list seq-str quality-str)
+           :text "read sequence and quality strings were not the same length"))
+  (let* ((i 32)
+         (j (+ i (1+ (length read-name))))
+         (k (+ j (if (null cigar)
+                     4
+                   (* 4 (length cigar)))))
+         (m (+ k (ceiling (length seq-str) 2)))
+         (n (+ m (if (null quality-str)
+                     1
+                   (length quality-str))))
+         (sizes (loop
+                   for (nil . value) in tag-values
+                   collect (alignment-tag-bytes value)))
+         (alignment-record (make-array (+ n (apply #'+ sizes))
+                                       :element-type '(unsigned-byte 8))))
+    (encode-int32le reference-id alignment-record 0)
+    (encode-int32le (if alignment-pos
+                        (1- alignment-pos)
+                      -1) alignment-record 4)
+    (encode-int8le (1+ (length read-name)) alignment-record 8)
+    (encode-int8le mapping-quality alignment-record 9)
+    (encode-int16le alignment-bin alignment-record 10)
+    (encode-int16le (length cigar) alignment-record 12)
+    (encode-int16le alignment-flag alignment-record 14)
+    (encode-int16le (length seq-str) alignment-record 16)
+    (encode-int32le mate-reference-id alignment-record 20)
+    (encode-int32le (if mate-alignment-pos
+                        (1- mate-alignment-pos)
+                      -1) alignment-record 24)
+    (encode-int32le insert-length alignment-record 28)
+    (encode-read-name read-name alignment-record i)
+    (encode-cigar cigar alignment-record j)
+    (encode-seq-string seq-str alignment-record k)
+    (encode-quality-string quality-str alignment-record m)
+    (loop
+       for (tag . value) in tag-values
+       for size in sizes
+       with offset = n
+       do (progn
+            (encode-alignment-tag value tag alignment-record offset)
+            (incf offset size))
+       finally (return alignment-record))))
+
+(defun flag-bits (flag &rest bit-names)
+  "Returns an integer FLAG that had BAM flag bits named by symbols
+BIT-NAMES set.
+
+Arguments:
+
+-  flag (unsigned-byte 8): a BAM alignment flag.
+
+Rest:
+
+- bit-names (symbols): Any number of valid bit flag names:
+
+;;; :sequenced-pair
+;;; :mapped-proper-pair
+;;; :query-mapped , :query-unmapped
+;;; :mate-mapped , :mate-unmapped
+;;; :query-forward , :query-reverse
+;;; :mate-forward , :mate-reverse
+;;; :first-in-pair , :second-in-pair
+;;; :alignment-primary , :alignment-not-primary
+;;; :fails-platform-qc
+;;; :pcr/optical-duplicate
+
+Returns:
+
+- An (unsigned-byte 8)"
+  (let ((f flag))
+    (dolist (name bit-names (ensure-valid-flag f))
+      (destructuring-bind (bit value)
+        (ecase name
+          (:sequenced-pair        '( 0 1))
+          (:mapped-proper-pair    '( 1 1))
+          (:query-mapped          '( 2 0))
+          (:query-unmapped        '( 2 1))
+          (:mate-mapped           '( 3 0))
+          (:mate-unmapped         '( 3 1))
+          (:query-forward         '( 4 0))
+          (:query-reverse         '( 4 1))
+          (:mate-forward          '( 5 0))
+          (:mate-reverse          '( 5 1))
+          (:first-in-pair         '( 6 1))
+          (:second-in-pair        '( 7 1))
+          (:alignment-primary     '( 8 0))
+          (:alignment-not-primary '( 8 1))
+          (:fails-platform-qc     '( 9 1))
+          (:pcr/optical-duplicate '(10 1)))
+        (setf (ldb (byte 1 bit) f) value)))))
+
 (defun reference-id (alignment-record)
   "Returns the reference sequence identifier of ALIGNMENT-RECORD. This
 is an integer locally assigned to a reference sequence within the
 context of a BAM file."
+  (declare (optimize (speed 3)))
   (decode-int32le alignment-record 0))
 
+(declaim (ftype (function (bam-alignment) (unsigned-byte 32))
+                alignment-position))
 (defun alignment-position (alignment-record)
   "Returns the 1-based sequence coordinate of ALIGNMENT-RECORD in the
 reference sequence of the first base of the clipped read."
@@ -202,53 +342,7 @@ the ALIGNMENT-RECORD. If the VALIDATE key is T (the default) the
 flag's bits are checked for internal consistency."
   (let ((flag (decode-uint16le alignment-record 14)))
     (if validate
-        (cond ((mapped-proper-pair-p flag)
-               (cond ((not (sequenced-pair-p flag))
-                      (flag-validation-error
-                       flag alignment-record
-                       (txt "the sequenced-pair flag was not set in a mapped"
-                            "proper pair")))
-                     ((not (valid-pair-num-p flag))
-                      (flag-validation-error
-                       flag alignment-record
-                        "first-in-pair and second-in-pair flags were both set"))
-                     ((not (valid-mapped-pair-p flag))
-                      (flag-validation-error
-                       flag alignment-record
-                       (txt "one read was flagged as unmapped in a mapped"
-                            "proper pair")))
-                     ((not (valid-mapped-proper-pair-p flag))
-                      (flag-validation-error
-                       flag alignment-record
-                       (txt "reads were not mapped to opposite strands in a"
-                            "mapped proper pair")))
-                     (t
-                      flag)))
-              ((sequenced-pair-p flag)
-               (if (valid-pair-num-p flag)
-                   flag
-                 (flag-validation-error
-                  flag alignment-record
-                  "first-in-pair and second-in-pair flags were both set")))
-              (t
-               (cond ((mate-reverse-p flag)
-                      (flag-validation-error
-                       flag alignment-record
-                       "the mate-reverse flag was set in an unpaired read"))
-                     ((mate-unmapped-p flag)
-                      (flag-validation-error
-                       flag alignment-record
-                       "the mate-unmapped flag was set in an unpaired read"))
-                     ((first-in-pair-p flag)
-                      (flag-validation-error
-                       flag alignment-record
-                       "the first-in-pair flag was set in an unpaired read"))
-                     ((second-in-pair-p flag)
-                      (flag-validation-error
-                       flag alignment-record
-                       "the second-in-pair flag was set in an unpaired read"))
-                     (t
-                      flag))))
+        (ensure-valid-flag flag alignment-record)
       flag)))
 
 (defun sequenced-pair-p (flag)
@@ -315,6 +409,11 @@ of reads from one template, or NIL otherwise."
   "Returns T if FLAG indicates that the read mapping was not the
 primary mapping to a reference, or NIL otherwise."
   (logbitp 8 flag))
+
+(defun alignment-primary-p (flag)
+  "Returns T if FLAG indicates that the read mapping was the primary
+mapping to a reference, or NIL otherwise."
+  (not (alignment-not-primary-p flag)))
 
 (defun fails-platform-qc-p (flag)
   "Returns T if FLAG indicates that the read failed plaform quality
@@ -462,92 +561,6 @@ alist. The primary purpose of this function is debugging."
                    (alignment-not-primary-p flag)
                    (fails-platform-qc-p flag)
                    (pcr/optical-duplicate-p flag)))))
-
-(defun make-alignment-record (read-name seq-str alignment-flag
-                              &key (reference-id -1) alignment-pos
-                              (mate-reference-id -1) mate-alignment-pos
-                              (mapping-quality 0) (alignment-bin 0)
-                              (insert-length 0)
-                              cigar quality-str tag-values)
-  "Returns a new alignment record array.
-
-Arguments:
-
-- read-name (string): The read name.
-- seq-str (string): The read sequence.
-- alignment-flag (integer): The binary alignment flag.
-
-Key:
-
-- reference-id (integer): The reference identifier, defaults to -1
-- alignment-pos (integer): The 1-based alignment position, defaults to -1.
-- mate-reference-id (integer): The reference identifier of the mate,
-  defaults to -1.
-- mate-alignment-pos (integer): The 1-based alignment position of the mate.
-- mapping-quality (integer): The mapping quality, defaults to 0.
-- alignment-bin (integer): The alignment bin, defaults to 0.
-- insert-length (integer): The insert size, defaults to 0.
-- cigar (alist): The cigar represented as an alist of operations e.g.
-
-;;; '((:M . 9) (:I . 1) (:M . 25))
-
-- quality-str (string): The read quality string.
-- tag-values (alist): The alignment tags represented as an alist e.g.
-
-;;; '((:XT . #\U) (:NM . 1) (:X0 . 1) (:X1 . 0)
-;;;   (:XM . 1) (:XO . 0) (:XG . 0) (:MD . \"3T31\"))
-
-The tags must have been defined with {defmacro define-alignment-tag} .
-
-Returns:
-
-- A vector of '(unsigned-byte 8)."
-  (when (and quality-str (/= (length seq-str) (length quality-str)))
-    (error 'invalid-argument-error
-           :params '(seq-str quality-str)
-           :args (list seq-str quality-str)
-           :text "read sequence and quality strings were not the same length"))
-  (let* ((i 32)
-         (j (+ i (1+ (length read-name))))
-         (k (+ j (if (null cigar)
-                     4
-                   (* 4 (length cigar)))))
-         (m (+ k (ceiling (length seq-str) 2)))
-         (n (+ m (if (null quality-str)
-                     1
-                   (length quality-str))))
-         (sizes (loop
-                   for (tag . value) in tag-values
-                   collect (alignment-tag-bytes value)))
-         (alignment-record (make-array (+ n (apply #'+ sizes))
-                                       :element-type '(unsigned-byte 8))))
-    (encode-int32le reference-id alignment-record 0)
-    (encode-int32le (if alignment-pos
-                        (1- alignment-pos)
-                      -1) alignment-record 4)
-    (encode-int8le (1+ (length read-name)) alignment-record 8)
-    (encode-int8le mapping-quality alignment-record 9)
-    (encode-int16le alignment-bin alignment-record 10)
-    (encode-int16le (length cigar) alignment-record 12)
-    (encode-int16le alignment-flag alignment-record 14)
-    (encode-int16le (length seq-str) alignment-record 16)
-    (encode-int32le mate-reference-id alignment-record 20)
-    (encode-int32le (if mate-alignment-pos
-                        (1- mate-alignment-pos)
-                      -1) alignment-record 24)
-    (encode-int32le insert-length alignment-record 28)
-    (encode-read-name read-name alignment-record i)
-    (encode-cigar cigar alignment-record j)
-    (encode-seq-string seq-str alignment-record k)
-    (encode-quality-string quality-str alignment-record m)
-    (loop
-       for (tag . value) in tag-values
-       for size in sizes
-       with offset = n
-       do (progn
-            (encode-alignment-tag value tag alignment-record offset)
-            (incf offset size))
-       finally (return alignment-record))))
 
 (defun alignment-indices (alignment-record)
   "Returns 7 integer values which are byte-offsets within
@@ -807,14 +820,64 @@ starting at INDEX."
     ((integer -2147483648 2147483647) 7)
     ((integer 0 4294967295) 7)))
 
-(defun flag-validation-error (flag alignment-record message)
+(defun ensure-valid-flag (flag &optional alignment-record)
+  (cond ((mapped-proper-pair-p flag)
+         (cond ((not (sequenced-pair-p flag))
+                (flag-validation-error
+                 flag (txt "the sequenced-pair bit was not set in a mapped"
+                           "proper pair flag") alignment-record))
+               ((not (valid-pair-num-p flag))
+                (flag-validation-error
+                 flag (txt "both first-in-pair and second-in-pair bits"
+                           "were set") alignment-record))
+               ((not (valid-mapped-pair-p flag))
+                (flag-validation-error
+                 flag (txt "one read was marked as unmapped in a mapped"
+                           "proper pair flag") alignment-record))
+               ((not (valid-mapped-proper-pair-p flag))
+                (flag-validation-error
+                 flag (txt "reads were not mapped to opposite strands in a"
+                           "mapped proper pair flag") alignment-record))
+               (t
+                flag)))
+        ((sequenced-pair-p flag)
+         (if (valid-pair-num-p flag)
+             flag
+           (flag-validation-error
+            flag "first-in-pair and second-in-pair bits were both set"
+            alignment-record)))
+        (t
+         (cond ((mate-reverse-p flag)
+                (flag-validation-error
+                 flag "the mate-reverse bit was set in an unpaired read"
+                 alignment-record))
+               ((mate-unmapped-p flag)
+                (flag-validation-error
+                 flag "the mate-unmapped bit was set in an unpaired read"
+                 alignment-record))
+               ((first-in-pair-p flag)
+                (flag-validation-error
+                 flag "the first-in-pair bit was set in an unpaired read"
+                 alignment-record))
+               ((second-in-pair-p flag)
+                (flag-validation-error
+                 flag "the second-in-pair bit was set in an unpaired read"
+                 alignment-record))
+               (t
+                flag)))))
+
+(defun flag-validation-error (flag message &optional alignment-record)
   "Raised a {define-condition malformed-field-error} for alignment
 FLAG in ALIGNMENT-RECORD, with MESSAGE."
-  (let ((reference-id (reference-id alignment-record))
-        (read-name (read-name alignment-record))
-        (pos (alignment-position alignment-record)))
-  (error 'malformed-field-error
-         :field flag
-         :text (format nil (txt "invalid flag ~b set for read ~s at ~a"
-                                "in reference ~d: ~a")
-                       flag read-name pos reference-id message))))
+  (if alignment-record
+      (let ((reference-id (reference-id alignment-record))
+            (read-name (read-name alignment-record))
+            (pos (alignment-position alignment-record)))
+        (error 'malformed-field-error
+               :field flag
+               :text (format nil (txt "invalid flag ~b set for read ~s at ~a"
+                                      "in reference ~d: ~a")
+                             flag read-name pos reference-id message)))
+    (error 'malformed-field-error
+           :field flag
+           :text (format nil "invalid flag ~b set: ~a" flag message))))

@@ -24,10 +24,14 @@ without redundancy or avoidable conflicts. Where conflicts are
 unavoidable, error conditions are raised to alert the user.
 
 Sorting operations are available using an external merge sort that is
-extensible by user-supplied sorting predicates.
+extensible by user-supplied sorting predicates. Typical sort
+performance on SBCL is close to that of samtools 0.16 (coordinate sort
+of the same 350 Mb file, average of 3 runs):
 
-BAM read performance is roughly 0.5x the speed of SAMtools C
-implementation (SBCL 1.0.30 X86_64).
+                  samtools C sort   169 sec
+
+cl-sam       (SBCL 1.0.32, 64-bit)  174 sec
+cl-sam    (Clozure CL 1.3, 64-bit)  235 sec
 
 
 Installation

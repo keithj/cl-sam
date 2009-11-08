@@ -118,8 +118,15 @@
    #:alignment-flag-alist
 
    #:make-alignment-record
+   #:flag-bits
    #:define-alignment-tag
    #:alignment-tag-documentation
+
+   ;; BAM sorting
+   #:sort-bam-file
+   #:alignment-record<
+   #:alignment-name<
+   #:alignment-strand<
 
    ;; Low-level SAM API
    #:make-sam-header
@@ -136,13 +143,12 @@
    #:subst-group-order)
   (:documentation "cl-sam is a Common Lisp toolkit for manipulation of
 DNA sequence alignment data stored in the Sequence Alignment/Map (SAM)
-format <http://samtools.sourceforge.net>. It is meant to be used in
-conjunction with the SAMtools C toolkit.
+format <http://samtools.sourceforge.net>. The SAM specficiation
+describes text (SAM) and binary (BAM) formats.
 
-The SAM specficiation describes text (SAM) and binary (BAM)
-formats. cl-sam originated as a small set of functions for exploring
-example BAM files and therefore provides only a subset of possible
-SAM/BAM read/write operations.
+cl-sam uses the BGZF block compression code from the SAMtools C
+toolkit, but is otherwise an independent Lisp implementation capable
+of editing every aspect of BAM files or creating BAM data de novo.
 
 The following example implements something similar to samtools
 flagstat:

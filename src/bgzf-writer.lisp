@@ -19,15 +19,20 @@
 
 (in-package :sam)
 
+(declaim (ftype (function (bgzf bam-alignment fixnum) fixnum) write-bytes))
+
 (defun write-bytes (bgzf bytes n)
+  (declare (optimize (speed 3)))
+  (declare (type (simple-array (unsigned-byte 8) (*)) bytes)
+           (type fixnum n))
   (with-foreign-object (array-ptr :unsigned-char n)
     (loop
        for i from 0 below n
        do (setf (mem-aref array-ptr :unsigned-char i) (aref bytes i)))
     (let ((num-written (bgzf-ffi:bgzf-write (bgzf-ptr bgzf) array-ptr n)))
+      (declare (type fixnum num-written))
       (if (< num-written n)
           (error 'bgzf-io-error
-                 :text (format nil (txt "expected to write ~a bytes"
-                                        "but only ~a were written")
+                 :text (format nil "expected to write ~a bytes but only ~a were written"
                                n num-written))
         n))))

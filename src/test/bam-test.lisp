@@ -28,6 +28,7 @@
              (y (random 4096))
              (bytes (sam::read-bytes bgzf x))
              (pos (bgzf-tell bgzf)))
+        (declare (ignore bytes))
         ;; Read further
         (let ((more-bytes (sam::read-bytes bgzf y)))
           ;; Seek back to where we were
@@ -37,7 +38,7 @@
           (ensure (equalp more-bytes (sam::read-bytes bgzf y))))))))
 
 (addtest (cl-sam-tests) bam-open/close/1
-  (let* ((filespec (namestring (merge-pathnames "data/c1215.bam")))
+  (let* ((filespec (pathstring (merge-pathnames "data/c1215.bam")))
          (bgzf (bgzf-open filespec)))
     (ensure-condition bgzf-io-error
       (bgzf-open "this/file/does/not/exist"))
@@ -47,7 +48,7 @@
             :report "failed to close handle")))
 
 (addtest (cl-sam-tests) bgzf-stream-read-byte/1
-  (let ((stream (bgzf-stream-open (namestring
+  (let ((stream (bgzf-stream-open (pathstring
                                    (merge-pathnames "data/c1215.bam"))
                                   :direction :input))
         (raw-data (read-raw-data (merge-pathnames "data/c1215.dat"))))
@@ -120,24 +121,25 @@
                                                   "data/c1215_fixmate.bam"))
                                      :direction :input)
                  (multiple-value-bind (header num-refs ref-meta)
-                     (read-bam-meta bgzf))
-                 (loop
-                    repeat 10
-                    for alignment = (read-alignment bgzf)
-                    collect (list (alignment-core-alist alignment)
-                                  (alignment-flag-alist alignment)
-                                  (alignment-tag-values alignment)
-                                  (alignment-cigar alignment)
-                                  (read-name alignment)
-                                  (seq-string alignment)
-                                  (quality-string alignment)
-                                  (alignment-tag-values alignment))))))
+                     (read-bam-meta bgzf)
+                   (declare (ignore header num-refs ref-meta))
+                   (loop
+                      repeat 10
+                      for alignment = (read-alignment bgzf)
+                      collect (list (alignment-core-alist alignment)
+                                    (alignment-flag-alist alignment)
+                                    (alignment-tag-values alignment)
+                                    (alignment-cigar alignment)
+                                    (read-name alignment)
+                                    (seq-string alignment)
+                                    (quality-string alignment)
+                                    (alignment-tag-values alignment)))))))
     (dotimes (i 10)
       (let ((expected (elt expected i))
-            (found (elt found i))))
-      (ensure (equalp expected found)
-              :report "alignment ~d: expected ~a but found ~a"
-              :arguments (i expected found)))))
+            (found (elt found i)))
+        (ensure (equalp expected found)
+                :report "alignment ~d: expected ~a but found ~a"
+                :arguments (i expected found))))))
 
 (addtest (cl-sam-tests) sequenced-pair-p/1
   (ensure (sequenced-pair-p #x0001)))
@@ -215,3 +217,113 @@
               (ensure (equalp aln aln2)
                       :report "expected ~a but found ~a"
                       :arguments (aln aln2)))))))
+
+(addtest (cl-sam-tests) alignment-record</1
+  ;; Unmapped (no reference) sort last
+  (ensure (alignment-record<
+           (make-alignment-record "aaa" "acgt" (flag-bits 0 :sequenced-pair
+                                                          :first-in-pair)
+                                  :alignment-pos 100
+                                  :reference-id 0)
+           (make-alignment-record "aaa" "acgt" (flag-bits 0 :sequenced-pair
+                                                          :second-in-pair)
+                                  :alignment-pos 1))))
+
+(addtest (cl-sam-tests) alignment-record</2
+  ;; By reference
+  (ensure (alignment-record<
+           (make-alignment-record "aaa" "acgt" (flag-bits 0 :sequenced-pair
+                                                          :first-in-pair)
+                                  :alignment-pos 100
+                                  :reference-id 0)
+           (make-alignment-record "aaa" "acgt" (flag-bits 0 :sequenced-pair
+                                                          :second-in-pair)
+                                  :alignment-pos 1
+                                  :reference-id 1))))
+
+(addtest (cl-sam-tests) alignment-record</3
+  ;; By position
+  (ensure (alignment-record<
+           (make-alignment-record "aaa" "acgt" (flag-bits 0 :sequenced-pair
+                                                          :first-in-pair)
+                                  :reference-id 1
+                                  :alignment-pos 1)
+           (make-alignment-record "aaa" "acgt" (flag-bits 0 :sequenced-pair
+                                                          :second-in-pair)
+                                  :reference-id 1
+                                  :alignment-pos 100))))
+
+(addtest (cl-sam-tests) alignment-record</4
+  ;; By strand
+  (ensure (alignment-record<
+           (make-alignment-record "aaa" "acgt" (flag-bits 0 :sequenced-pair
+                                                          :first-in-pair
+                                                          :query-forward)
+                                  :reference-id 1
+                                  :alignment-pos 1)
+           (make-alignment-record "aaa" "acgt" (flag-bits 0 :sequenced-pair
+                                                          :second-in-pair
+                                                          :query-reverse)
+                                  :reference-id 1
+                                  :alignment-pos 1))))
+
+(addtest (cl-sam-tests) alignment-name</1
+  ;; By name
+  (ensure (alignment-name<
+           (make-alignment-record "aaa" "acgt" (flag-bits 0 :sequenced-pair
+                                                          :first-in-pair))
+           (make-alignment-record "aab" "acgt" (flag-bits 0 :sequenced-pair
+                                                          :first-in-pair)))))
+
+(addtest (cl-sam-tests) alignment-name</2
+  ;; Fallback to position
+  (ensure (alignment-name<
+           (make-alignment-record "aaa" "acgt" (flag-bits 0 :sequenced-pair
+                                                          :first-in-pair)
+                                  :alignment-pos 1)
+           (make-alignment-record "aaa" "acgt" (flag-bits 0 :sequenced-pair
+                                                          :first-in-pair)
+                                  :alignment-pos 2))))
+
+(addtest (cl-sam-tests) alignment-name</3
+  ;; Fallback to strand
+  (ensure (alignment-name<
+           (make-alignment-record "aaa" "acgt" (flag-bits 0 :sequenced-pair
+                                                          :first-in-pair
+                                                          :query-forward)
+                                  :alignment-pos 1)
+           (make-alignment-record "aaa" "acgt" (flag-bits 0 :sequenced-pair
+                                                          :first-in-pair
+                                                          :query-reverse)
+                                  :alignment-pos 1))))
+
+(addtest (cl-sam-tests) alignment-strand</1
+  ;; Forward strand sorts first
+  (ensure (alignment-strand<
+           (make-alignment-record "???" "acgt" (flag-bits 0 :sequenced-pair
+                                                          :first-in-pair
+                                                          :query-forward))
+           (make-alignment-record "???" "acgt" (flag-bits 0 :sequenced-pair
+                                                          :second-in-pair
+                                                          :query-reverse)))))
+
+(addtest (cl-sam-tests) alignment-strand</2
+  (ensure (notany
+           (lambda (s1 s2)
+             (alignment-strand< 
+              (make-alignment-record "x" "acgt"
+                                     (flag-bits 0 :sequenced-pair
+                                                :first-in-pair s1))
+              (make-alignment-record "x" "acgt"
+                                     (flag-bits 0 :sequenced-pair
+                                                :second-in-pair s2))))
+           '(:query-forward :query-reverse :query-reverse)
+           '(:query-forward :query-reverse :query-forward))))
+
+;; FIXME -- test the file contents!
+(addtest (cl-sam-tests) sort-bam-file/1
+  (let ((unsorted (namestring (merge-pathnames "data/c1215.bam")))
+        (sorted (namestring (merge-pathnames "data/c1215-coordinate.bam"))))
+    (sort-bam-file unsorted sorted :sort-order :coordinate
+                   :buffer-size 10000)
+    (ensure (fad:file-exists-p sorted))))

@@ -151,11 +151,11 @@ the next byte is to be read."))
                    (buffer buffer-of) (offset offset-of)
                    (num-bytes num-bytes-of))
       stream
+    (declare (type bgzf-buffer buffer))
     (let ((n (length buffer)))
       (with-foreign-object (array-ptr :unsigned-char n)
         (let ((num-read (bgzf-ffi:bgzf-read (bgzf-ptr bgzf) array-ptr n)))
           (declare (optimize (speed 3) (safety 1)))
-          (declare (type bgzf-buffer buffer))
           (declare (type bgzf-buffer-index num-read))
           (loop
              for i from 0 below num-read
