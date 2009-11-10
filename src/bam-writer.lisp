@@ -67,8 +67,8 @@ of bytes written."
   (let ((alen (length alignment-record))
         (alen-bytes (make-array 4 :element-type '(unsigned-byte 8))))
     (encode-int32le alen alen-bytes)
-    (+ (write-bytes bgzf alen-bytes 4)
-       (write-bytes bgzf alignment-record alen))))
+    (the fixnum (+ (write-bytes bgzf alen-bytes 4)
+                   (write-bytes bgzf alignment-record alen)))))
 
 (defun write-bam-meta (bgzf header num-refs ref-meta)
   "Writes BAM magic number and then all metadata to handle BGZF. The

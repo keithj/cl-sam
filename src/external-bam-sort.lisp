@@ -91,15 +91,8 @@ to be:
 - mapped reads should first be sorted by their reference in the order
   in which reference sequences appear in the header
 - unmapped reads should sort after mapped reads
-
-- reads mapped to the same referenec must appear either in ascending
-  order of their alignment position
-
-
-, or in some order based on their
-  read name (i.e. whether
-
-  you should expect natural order or numeric sorting is not defined)
+- reads mapped to the same reference must appear in ascending order of
+  their alignment position
 
 This function compares first by reference sequence, then alignment
 position and finally by alignment strand."

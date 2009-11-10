@@ -50,9 +50,9 @@
                            (:file "bam-reader")
                            (:file "bam-writer")
                            (:file "sam-writer")
-                           (:file "external-bam-sort")
                            (:file "bam")
-                           (:file "sam")))
+                           (:file "sam")
+                           (:file "external-bam-sort")))
      (:lift-test-config :lift-tests
                         :pathname "cl-sam-test.config"
                         :target-system :cl-sam)
