@@ -95,14 +95,17 @@ to be:
   their alignment position
 
 This function compares first by reference sequence, then alignment
-position and finally by alignment strand."
+position, by alignment strand and finally by read name. The output is
+identical to a coordinate sort performed by Picard 1.07."
   (declare (optimize (speed 3)))
   (let ((ref1 (reference-id alignment-record1))
         (ref2 (reference-id alignment-record2)))
     (declare (type int32 ref1 ref2))
-    (cond ((minusp ref1) ; unmapped read
+    (cond ((= -1 ref1 ref2)             ; unmapped reads
            nil)
-          ((minusp ref2) ; unmapped read
+          ((= -1 ref1)                  ; unmapped read
+           nil)
+          ((= -1 ref2)                  ; unmapped read
            t)
           ((= ref1 ref2)
            (let ((pos1 (alignment-position alignment-record1))
@@ -110,8 +113,16 @@ position and finally by alignment strand."
              (declare (type int32 pos1 pos2))
              (or (< pos1 pos2)
                  (and (= pos1 pos2)
-                      (alignment-strand<
-                       alignment-record1 alignment-record2)))))
+                      (let ((q1 (query-forward-p
+                                 (alignment-flag alignment-record1)))
+                            (q2 (query-forward-p
+                                 (alignment-flag alignment-record2))))
+                        (if (eq q1 q2)
+                            (let ((name1 (read-name alignment-record1))
+                                  (name2 (read-name alignment-record2)))
+                              (declare (type simple-base-string name1 name2))
+                              (string< name1 name2))
+                          (and q1 (not q2))))))))
           (t
            (< ref1 ref2)))))
 
@@ -137,17 +148,10 @@ position and finally by alignment strand."
                (declare (type int32 pos1 pos2))
                (or (< pos1 pos2)
                    (and (= pos1 pos2)
-                        (alignment-strand<
-                         alignment-record1 alignment-record2))))))))
-
-(declaim (inline alignment-strand<))
-(defun alignment-strand< (alignment-record1 alignment-record2)
-  "Returns T if ALIGNMENT-RECORD1 sorts before ALIGNMENT-RECORD2 by
-alignment strand, with a read mapping to the forward strand before a
-read mapping to the reverse strand of the reference."
-  (declare (optimize (speed 3)))
-  (and (query-forward-p (alignment-flag alignment-record1))
-       (query-reverse-p (alignment-flag alignment-record2))))
+                        (and (query-forward-p
+                              (alignment-flag alignment-record1))
+                             (not (query-forward-p
+                                   (alignment-flag alignment-record2)))))))))))
 
 (defun sort-bam-file (in-filespec out-filespec
                       &key (sort-order :coordinate) (buffer-size 1000000))
@@ -178,8 +182,10 @@ Returns:
                            (:coordinate #'alignment-record<)
                            (:queryname #'alignment-name<)))
               (header-str (make-header-string
-                           (subst-sort-order
-                            (ensure-order header :sort) sort-order))))
+                           (subst-sam-version
+                            (subst-sort-order
+                             (ensure-order (make-sam-header header) :sort)
+                             sort-order)))))
           (write-bam-meta bgzf-out header-str num-refs ref-meta)
           (sort-bam-alignments bgzf-in bgzf-out predicate
                                :buffer-size buffer-size))))))
