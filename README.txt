@@ -19,20 +19,24 @@ Read      No    Yes
 Write     No    Yes
 
 Sorting operations are available using an external merge sort that is
-extensible by user-supplied sorting predicates. Typical sort
-performance on SBCL is close to that of samtools 0.16 (coordinate sort
-of the same 350 Mb BAM file, average of 3 runs):
+extensible by user-supplied sorting predicates. Typical coordinate
+sort performance on the same 350 Mb queryname-sorted BAM file, average
+of 3 runs):
 
-                                       samtools C sort      169 sec
-Picard MergeSamFiles (IcedTea Java 1.6 server, 64 bit)      188 sec
+                                 samtools C 0.1.7 sort      176 sec
 
-                          cl-sam (SBCL 1.0.32, 64-bit)      167 sec [1]
-                                                            213 sec [2]
-                       cl-sam (Clozure CL 1.3, 64-bit)      235 sec
+                            Picard 1.0.7 MergeSamFiles
+             (IcedTea Java 1.6 -server -Xmx2G, 64-bit)      161 sec
+                            Picard 1.0.6 MergeSamFiles
+             (IcedTea Java 1.6 -server -Xmx2G, 64-bit)      213 sec
 
-[1] Timing taken immediately after a full GC.
-[2] Timing taken immediately after sorting another, identical file.
+                            cl-sam 0.5.1 sort-bam-file
+               (Steel Bank Common Lisp 1.0.32, 64-bit)      204 sec [1]
+                                                            211 sec [2]
+                     (Clozure Common Lisp 1.4, 64-bit)      287 sec
 
+[1] Timings taken from a cold start or immediately after a full GC.
+[2] Timings taken sorting files successively in one session.
 
 Installation
 
