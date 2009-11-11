@@ -291,6 +291,7 @@ Returns:
           (:pcr/optical-duplicate '(10 1)))
         (setf (ldb (byte 1 bit) f) value)))))
 
+(declaim (inline reference-id))
 (defun reference-id (alignment-record)
   "Returns the reference sequence identifier of ALIGNMENT-RECORD. This
 is an integer locally assigned to a reference sequence within the
@@ -300,6 +301,7 @@ context of a BAM file."
 
 (declaim (ftype (function (bam-alignment) (unsigned-byte 32))
                 alignment-position))
+(declaim (inline alignment-position))
 (defun alignment-position (alignment-record)
   "Returns the 1-based sequence coordinate of ALIGNMENT-RECORD in the
 reference sequence of the first base of the clipped read."
@@ -336,6 +338,7 @@ ALIGNMENT-RECORD has been assigned."
   "Returns the number of CIGAR operations in ALIGNMENT-RECORD."
   (decode-uint16le alignment-record 12))
 
+(declaim (inline alignment-flag))
 (defun alignment-flag (alignment-record &key (validate t))
   "Returns an integer whose bits are flags that describe properties of
 the ALIGNMENT-RECORD. If the VALIDATE key is T (the default) the
@@ -375,14 +378,17 @@ a reference, or NIL otherwise."
 reference, or NIL otherwise."
   (not (mate-unmapped-p flag)))
 
+(declaim (inline query-forward-p))
 (defun query-forward-p (flag)
   "Returns T if FLAG indicates that the read was mapped to the forward
 strand of a reference, or NIL if it was mapped to the reverse strand."
   (not (query-reverse-p flag)))
 
+(declaim (inline query-reverse-p))
 (defun query-reverse-p (flag)
   "Returns T if FLAG indicates that the read was mapped to the reverse
 strand of a reference, or NIL if it was mapped to the forward strand."
+  (declare (type uint16 flag))
   (logbitp 4 flag))
 
 (defun mate-forward-p (flag)
