@@ -129,6 +129,7 @@
    #:alignment-strand<
 
    ;; Low-level SAM API
+   #:*sam-version*
    #:make-sam-header
    #:make-header-record
    #:header-type
@@ -139,6 +140,7 @@
    ;; SAM header editing
    #:merge-sam-headers
    #:merge-header-records
+   #:subst-sam-version
    #:subst-sort-order
    #:subst-group-order)
   (:documentation "cl-sam is a Common Lisp toolkit for manipulation of
