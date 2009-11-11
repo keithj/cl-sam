@@ -29,7 +29,7 @@
 
 (defsystem cl-sam
     :name "cl-sam"
-    :version "0.5.1"
+    :version "0.5.2"
     :author "Keith James"
     :licence "GPL v3"
     :depends-on ((:version :cffi "0.10.3")
