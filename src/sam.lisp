@@ -19,6 +19,11 @@
 
 (in-package :sam)
 
+(defparameter *sam-version* "0.1.2-draft (20090416)"
+  "The SAM version written by cl-sam. This is a revision of the draft
+  that does not support @CO header lines, which were introduced
+  later.")
+
 (defparameter *valid-header-types* '(:hd :sq :rg :pg)
   "A list of valid SAM header types.")
 (defparameter *mandatory-header-tags*
@@ -206,7 +211,8 @@ values."
 
 (defun make-sam-header (str)
   "Returns a list containing the data in header STR as Lisp
-objects.
+objects. If the header is NIL (there was no header) this function
+returns NIL.
 
 Given a header of
 
@@ -225,19 +231,20 @@ the returned list will be
 thus each list element is a list whose first element is a keyword
 describing the record type. The rest of each list is itself an alist
 of record keys and values."
-  (with-input-from-string (s str)
-    (loop
-       for line = (read-line s nil nil)
-       while line
-       for (header-type . tags) = (make-header-record line)
-       collect (let* ((tags (remove-duplicates tags :test #'equal))
-                      (clashes (find-duplicate-header-tags tags))
-                      (record (cons header-type tags)))
-                 (when clashes
-                   (error 'malformed-record-error
-                          :record record
-                          :text (format nil "clashing tags ~a" clashes)))
-                 record))))
+  (when str
+    (with-input-from-string (s str)
+      (loop
+         for line = (read-line s nil nil)
+         while line
+         for (header-type . tags) = (make-header-record line)
+         collect (let* ((tags (remove-duplicates tags :test #'equal))
+                        (clashes (find-duplicate-header-tags tags))
+                        (record (cons header-type tags)))
+                   (when clashes
+                     (error 'malformed-record-error
+                            :record record
+                            :text (format nil "clashing tags ~a" clashes)))
+                   record)))))
 
 (defun merge-sam-headers (&rest headers)
   "Returns a new SAM header that is the result of merging
@@ -251,6 +258,14 @@ records contain conflicting tag values once merged."
                       (simplify-records sq :sn)
                       (simplify-records rg :id)
                       (simplify-records pg :id)))))
+
+(defun subst-sam-version (header &optional (version *sam-version*))
+  "Returns a copy of HEADER with any header version tag initially
+present substituted by string VERSION, defaulting to *SAM-VERSION* ."
+  (let ((current (assoc :vn (assocdr :hd header))))
+    ;; TODO -- warn if we are writing an older SAM version than we are
+    ;; reading or if otherwise not backwardly compatible.
+    (subst (cons :vn version) current header)))
 
 (defun subst-sort-order (header order)
   "Returns a copy of HEADER with any sort order tag initially present
