@@ -297,29 +297,6 @@
                                                           :query-reverse)
                                   :alignment-pos 1))))
 
-(addtest (cl-sam-tests) alignment-strand</1
-  ;; Forward strand sorts first
-  (ensure (alignment-strand<
-           (make-alignment-record "???" "acgt" (flag-bits 0 :sequenced-pair
-                                                          :first-in-pair
-                                                          :query-forward))
-           (make-alignment-record "???" "acgt" (flag-bits 0 :sequenced-pair
-                                                          :second-in-pair
-                                                          :query-reverse)))))
-
-(addtest (cl-sam-tests) alignment-strand</2
-  (ensure (notany
-           (lambda (s1 s2)
-             (alignment-strand< 
-              (make-alignment-record "x" "acgt"
-                                     (flag-bits 0 :sequenced-pair
-                                                :first-in-pair s1))
-              (make-alignment-record "x" "acgt"
-                                     (flag-bits 0 :sequenced-pair
-                                                :second-in-pair s2))))
-           '(:query-forward :query-reverse :query-reverse)
-           '(:query-forward :query-reverse :query-forward))))
-
 ;; FIXME -- test the file contents!
 (addtest (cl-sam-tests) sort-bam-file/1
   (let ((unsorted (namestring (merge-pathnames "data/c1215.bam")))
