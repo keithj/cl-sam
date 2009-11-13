@@ -29,7 +29,7 @@
 
 (defsystem cl-sam
     :name "cl-sam"
-    :version "0.5.2"
+    :version "0.5.3"
     :author "Keith James"
     :licence "GPL v3"
     :depends-on ((:version :cffi "0.10.3")
@@ -48,11 +48,12 @@
                            (:file "bgzf-writer")
                            (:file "bgzf-stream")
                            (:file "bam-reader")
-                           (:file "bam-writer")
-                           (:file "sam-writer")
                            (:file "bam")
                            (:file "sam")
-                           (:file "external-bam-sort")))
+                           (:file "bam-writer")
+                           (:file "sam-writer")
+                           (:file "external-bam-sort")
+                           (:file "cl-sam")))
      (:lift-test-config :lift-tests
                         :pathname "cl-sam-test.config"
                         :target-system :cl-sam)

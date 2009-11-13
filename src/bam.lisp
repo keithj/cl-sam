@@ -157,6 +157,13 @@ Optional:
 (define-alignment-tag :xO :int32)
 (define-alignment-tag :xt :char)
 
+(defun make-reference-table (ref-meta-list)
+  "Returns a hash-table mapping reference identifiers to reference
+names for the reference data in REF-META-LIST."
+  (let ((ref-table (make-hash-table :size (length ref-meta-list))))
+    (dolist (ref-meta ref-meta-list ref-table)
+      (setf (gethash (first ref-meta) ref-table) (second ref-meta)))))
+
 (defun make-alignment-record (read-name seq-str alignment-flag
                               &key (reference-id -1) alignment-pos
                               (mate-reference-id -1) mate-alignment-pos
@@ -291,6 +298,8 @@ Returns:
           (:pcr/optical-duplicate '(10 1)))
         (setf (ldb (byte 1 bit) f) value)))))
 
+;; (declaim (ftype (function (bam-alignment) (unsigned-byte 32))
+;;                 reference-id))
 (declaim (inline reference-id))
 (defun reference-id (alignment-record)
   "Returns the reference sequence identifier of ALIGNMENT-RECORD. This
@@ -299,8 +308,8 @@ context of a BAM file."
   (declare (optimize (speed 3)))
   (decode-int32le alignment-record 0))
 
-(declaim (ftype (function (bam-alignment) (unsigned-byte 32))
-                alignment-position))
+;; (declaim (ftype (function (bam-alignment) (unsigned-byte 32))
+;;                 alignment-position))
 (declaim (inline alignment-position))
 (defun alignment-position (alignment-record)
   "Returns the 1-based sequence coordinate of ALIGNMENT-RECORD in the
@@ -470,6 +479,7 @@ consistent."
 
 (defun mate-reference-id (alignment-record)
   "Returns the integer reference ID of ALIGNMENT-RECORD."
+  (declare (optimize (speed 3)))
   (decode-int32le alignment-record 20))
 
 (defun mate-alignment-position (alignment-record)
@@ -499,26 +509,25 @@ length."
 (defun seq-string (alignment-record)
   "Returns the sequence string described by ALIGNMENT-RECORD."
   (multiple-value-bind (read-len cigar-index cigar-bytes seq-index
-                        seq-bytes qual-index tag-index)
+                        qual-index tag-index)
       (alignment-indices alignment-record)
-    (declare (ignore cigar-index cigar-bytes seq-bytes qual-index tag-index))
+    (declare (ignore cigar-index cigar-bytes qual-index tag-index))
     (decode-seq-string alignment-record seq-index read-len)))
 
 (defun quality-string (alignment-record)
   "Returns the sequence quality string described by ALIGNMENT-RECORD."
   (multiple-value-bind (read-len cigar-index cigar-bytes seq-index
-                        seq-bytes qual-index tag-index)
+                        qual-index tag-index)
       (alignment-indices alignment-record)
-    (declare (ignore cigar-index cigar-bytes seq-bytes seq-index tag-index))
+    (declare (ignore cigar-index cigar-bytes seq-index tag-index))
     (decode-quality-string alignment-record qual-index read-len)))
 
 (defun alignment-tag-values (alignment-record)
   "Returns an alist of tag and values described by ALIGNMENT-RECORD."
   (multiple-value-bind (read-len cigar-index cigar-bytes seq-index
-                        seq-bytes qual-index tag-index)
+                        qual-index tag-index)
       (alignment-indices alignment-record)
-    (declare (ignore read-len cigar-index cigar-bytes seq-bytes qual-index
-                     seq-index))
+    (declare (ignore read-len cigar-index cigar-bytes qual-index seq-index))
     (decode-tag-values alignment-record tag-index)))
 
 (defun alignment-core (alignment-record &key (validate t))
@@ -580,8 +589,7 @@ spec."
          (seq-bytes (ceiling read-len 2))
          (qual-index (+ seq-index seq-bytes))
          (tag-index (+ qual-index read-len)))
-    (values read-len cigar-index cigar-bytes seq-index seq-bytes
-            qual-index tag-index)))
+    (values read-len cigar-index cigar-bytes seq-index qual-index tag-index)))
 
 (defun decode-read-name (alignment-record index num-bytes)
   "Returns a string containing the template/read name of length
@@ -617,7 +625,7 @@ NUM-BYTES. The sequence must be present in ALIGNMENT-RECORD at INDEX."
     (loop
        with seq = (make-array num-bytes :element-type 'base-char)
        for i from 0 below num-bytes
-       for j of-type (unsigned-byte 32) = (+ index (floor i 2))
+       for j of-type uint32 = (+ index (floor i 2))
        do (setf (char seq i)
                 (decode-base (if (evenp i)
                                  (ldb (byte 4 4) (aref alignment-record j))
@@ -753,6 +761,7 @@ INDEX. The BAM two-letter data keys are transformed to Lisp keywords."
                               (setf tag-index (+ val-index 1))
                               (decode-int8le alignment-record val-index))
                              (#\f         ; f single-precision float
+                              (setf tag-index (+ val-index 4))
                               (decode-float32le alignment-record val-index))
                              (#\i         ; i signed 32-bit integer
                               (setf tag-index (+ val-index 4))

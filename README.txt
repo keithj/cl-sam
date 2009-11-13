@@ -16,7 +16,7 @@ The operations supported in this version are:
 
          SAM    BAM
 Read      No    Yes
-Write     No    Yes
+Write    Yes    Yes
 
 Sorting operations are available using an external merge sort that is
 extensible by user-supplied sorting predicates. Typical coordinate

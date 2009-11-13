@@ -326,4 +326,5 @@
         (sorted (namestring (merge-pathnames "data/c1215-coordinate.bam"))))
     (sort-bam-file unsorted sorted :sort-order :coordinate
                    :buffer-size 10000)
-    (ensure (fad:file-exists-p sorted))))
+    (ensure (fad:file-exists-p sorted))
+    ))

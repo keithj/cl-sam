@@ -142,7 +142,11 @@
    #:merge-header-records
    #:subst-sam-version
    #:subst-sort-order
-   #:subst-group-order)
+   #:subst-group-order
+
+   ;; Utiltiies
+   #:view-sam
+   #:flagstat)
   (:documentation "cl-sam is a Common Lisp toolkit for manipulation of
 DNA sequence alignment data stored in the Sequence Alignment/Map (SAM)
 format <http://samtools.sourceforge.net>. The SAM specficiation
