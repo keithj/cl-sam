@@ -32,8 +32,8 @@
 
 - file: The name of a block gzippped file.
 - ptr: A foreign pointer to a BGZF struct.
-- open-p: A flag indicating that while T indicates that the foreign
-  pointer may be freed."
+- open-p: A flag that, while T, indicates that the foreign pointer may
+  be freed."
   (file nil :type t)
   (ptr nil :type t)
   (open-p nil :type t))
@@ -90,10 +90,9 @@ Returns:
 
 - T on success."
   (when (bgzf-open-p bgzf)
-    (if (zerop (bgzf-ffi:bgzf-close (bgzf-ptr bgzf)))
-        t
-      (error 'bgzf-io-error :errno unix-ffi:*c-error-number*
-             :text (format nil "failed to close ~a cleanly" bgzf)))))
+    (or (zerop (bgzf-ffi:bgzf-close (bgzf-ptr bgzf)))
+        (error 'bgzf-io-error :errno unix-ffi:*c-error-number*
+               :text (format nil "failed to close ~a cleanly" bgzf)))))
 
 (defun bgzf-seek (bgzf position)
   "Seeks with the file encapsulated by a block gzip handle.
