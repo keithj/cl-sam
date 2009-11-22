@@ -118,6 +118,7 @@
    #:alignment-flag-alist
 
    #:make-alignment-record
+   #:make-reference-table
    #:flag-bits
    #:define-alignment-tag
    #:alignment-tag-documentation
@@ -136,6 +137,10 @@
    #:header-tags
    #:ensure-mandatory-header-tags
    #:ensure-valid-header-tags
+
+   #:write-sam-header
+   #:write-header-record
+   #:write-sam-alignment
 
    ;; SAM header editing
    #:merge-sam-headers

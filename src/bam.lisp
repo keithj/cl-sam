@@ -223,9 +223,7 @@ Returns:
          (alignment-record (make-array (+ n (apply #'+ sizes))
                                        :element-type '(unsigned-byte 8))))
     (encode-int32le reference-id alignment-record 0)
-    (encode-int32le (if alignment-pos
-                        (1- alignment-pos)
-                      -1) alignment-record 4)
+    (encode-int32le (or alignment-pos -1) alignment-record 4)
     (encode-int8le (1+ (length read-name)) alignment-record 8)
     (encode-int8le mapping-quality alignment-record 9)
     (encode-int16le alignment-bin alignment-record 10)
@@ -233,9 +231,7 @@ Returns:
     (encode-int16le alignment-flag alignment-record 14)
     (encode-int16le (length seq-str) alignment-record 16)
     (encode-int32le mate-reference-id alignment-record 20)
-    (encode-int32le (if mate-alignment-pos
-                        (1- mate-alignment-pos)
-                      -1) alignment-record 24)
+    (encode-int32le (or mate-alignment-pos -1) alignment-record 24)
     (encode-int32le insert-length alignment-record 28)
     (encode-read-name read-name alignment-record i)
     (encode-cigar cigar alignment-record j)
@@ -312,10 +308,10 @@ context of a BAM file."
 ;;                 alignment-position))
 (declaim (inline alignment-position))
 (defun alignment-position (alignment-record)
-  "Returns the 1-based sequence coordinate of ALIGNMENT-RECORD in the
+  "Returns the 0-based sequence coordinate of ALIGNMENT-RECORD in the
 reference sequence of the first base of the clipped read."
   (declare (optimize (speed 3)))
-  (1+ (decode-int32le alignment-record 4)))
+  (decode-int32le alignment-record 4))
 
 (defun alignment-read-length (alignment-record)
   "Returns the length of the alignment on the read."
@@ -483,9 +479,9 @@ consistent."
   (decode-int32le alignment-record 20))
 
 (defun mate-alignment-position (alignment-record)
-  "Returns the 1-based sequence position of the read mate's alignment
+  "Returns the 0-based sequence position of the read mate's alignment
 described by ALIGNMENT-RECORD."
-  (1+ (decode-int32le alignment-record 24)))
+  (decode-int32le alignment-record 24))
 
 (defun insert-length (alignment-record)
   "Returns the insert length described by ALIGNMENT-RECORD."

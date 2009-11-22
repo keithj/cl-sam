@@ -21,7 +21,7 @@ Write    Yes    Yes
 Sorting operations are available using an external merge sort that is
 extensible by user-supplied sorting predicates. Typical coordinate
 sort performance on the same 350 Mb queryname-sorted BAM file, average
-of 3 runs):
+of 3 runs:
 
                                  samtools C 0.1.7 sort      176 sec
 

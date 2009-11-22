@@ -25,17 +25,24 @@
                          :direction :output :element-type 'base-char
                          :external-format :ascii
                          :if-exists :supersede)
-      (multiple-value-bind (header num-refs ref-meta)
-          (read-bam-meta bgzf)
-        (declare (ignore num-refs))
-        (write-string header out)
-        (loop
-           with refs = (make-reference-table ref-meta)
-           for alignment = (read-alignment bgzf)
-           while alignment
-           count alignment into total
-           do (write-sam-alignment alignment refs out)
-           finally (return total))))))
+      (stream-view-sam bgzf out))))
+
+(defun stream-view-sam (bgzf &optional (stream t))
+  (unless (zerop (bgzf-tell bgzf))    ; Rewind unless already at start
+    (bgzf-seek bgzf 0))
+  (multiple-value-bind (header num-refs ref-meta)
+      (read-bam-meta bgzf)
+    (declare (ignore num-refs))
+    (write-sam-header (ensure-order
+                       (ensure-sam-version
+                        (make-sam-header header)) :sort) stream)
+    (loop
+       with refs = (make-reference-table ref-meta)
+       for alignment = (read-alignment bgzf)
+       while alignment
+       count alignment into total
+       do (write-sam-alignment alignment refs stream)
+       finally (return total))))
 
 (defun flagstat (bam-filespec)
   (with-bgzf-file (bgzf bam-filespec :direction :input)

@@ -50,12 +50,13 @@ ALIST."
 (defun write-sam-alignment (alignment-record ref-table &optional (stream t))
   "Writes ALIGNMENT-RECORD to STREAM as SAM. REF-TABLE is a
 hash-table created by {defun make-reference-table} ."
-  (declare (optimize (speed 3)))
+  (declare (optimize (speed 3) (safety 0)))
   (multiple-value-bind (read-len cigar-index cigar-bytes seq-index
                         qual-index tag-index)
       (alignment-indices alignment-record)
-    (let ((position (alignment-position alignment-record))
-          (mate-position (mate-alignment-position alignment-record)))
+    (let ((position (1+ (the fixnum (alignment-position alignment-record))))
+          (mate-position (1+ (the fixnum (mate-alignment-position
+                                          alignment-record)))))
       (declare (type fixnum cigar-bytes position mate-position))
       (write-string (read-name alignment-record) stream)
       (write-char #\Tab stream)
