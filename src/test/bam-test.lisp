@@ -20,7 +20,7 @@
 (in-package :sam-test)
 
 (addtest (cl-sam-tests) bgzf-seek/tell/1
-  (with-bgzf-file (bgzf (namestring (merge-pathnames "data/c1215.bam"))
+  (with-bgzf-file (bgzf (merge-pathnames "data/c1215.bam")
                         :direction :input)
     (ensure (bgzf-open-p bgzf) :report "expected an open handle")
     (dotimes (n 1)
@@ -38,7 +38,7 @@
           (ensure (equalp more-bytes (sam::read-bytes bgzf y))))))))
 
 (addtest (cl-sam-tests) bam-open/close/1
-  (let* ((filespec (pathstring (merge-pathnames "data/c1215.bam")))
+  (let* ((filespec (merge-pathnames "data/c1215.bam"))
          (bgzf (bgzf-open filespec)))
     (ensure-condition bgzf-io-error
       (bgzf-open "this/file/does/not/exist"))
@@ -48,8 +48,7 @@
             :report "failed to close handle")))
 
 (addtest (cl-sam-tests) bgzf-stream-read-byte/1
-  (let ((stream (bgzf-stream-open (pathstring
-                                   (merge-pathnames "data/c1215.bam"))
+  (let ((stream (bgzf-stream-open (merge-pathnames "data/c1215.bam")
                                   :direction :input))
         (raw-data (read-raw-data (merge-pathnames "data/c1215.dat"))))
     (ensure (loop
@@ -62,8 +61,7 @@
             :report "failed to close stream")))
 
 (addtest (cl-sam-tests) bgzf-stream-read-sequence/1
-  (let ((stream (bgzf-stream-open (namestring
-                                   (merge-pathnames "data/c1215.bam"))
+  (let ((stream (bgzf-stream-open (merge-pathnames "data/c1215.bam")
                                   :direction :input))
         (raw-data (read-raw-data (merge-pathnames "data/c1215.dat")))
         (buffer (make-array 100 :element-type '(unsigned-byte 8)
@@ -77,7 +75,7 @@
             :report "failed to close stream")))
 
 (addtest (cl-sam-tests) bam-parse/1
-  (let* ((filespec (namestring (merge-pathnames "data/c1215.bam")))
+  (let* ((filespec (merge-pathnames "data/c1215.bam"))
          (bgzf (bgzf-open filespec)))
     (unwind-protect
          (progn
@@ -194,7 +192,7 @@
     (delete-file out-filespec)))
 
 (addtest (cl-sam-tests) bam-round-trip/2
-  (with-bgzf-file (bgzf (namestring (merge-pathnames "data/c1215.bam"))
+  (with-bgzf-file (bgzf (merge-pathnames "data/c1215.bam")
                         :direction :input)
     (multiple-value-bind (header num-refs ref-meta)
         (read-bam-meta bgzf)
@@ -299,8 +297,8 @@
 
 ;; FIXME -- test the file contents!
 (addtest (cl-sam-tests) sort-bam-file/1
-  (let ((unsorted (namestring (merge-pathnames "data/c1215.bam")))
-        (sorted (namestring (merge-pathnames "data/c1215-coordinate.bam"))))
+  (let ((unsorted (merge-pathnames "data/c1215.bam"))
+        (sorted (merge-pathnames "data/c1215-coordinate.bam")))
     (sort-bam-file unsorted sorted :sort-order :coordinate
                    :buffer-size 10000)
     (ensure (fad:file-exists-p sorted))
