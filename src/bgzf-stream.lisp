@@ -105,8 +105,10 @@ the next byte is to be read."))
 (defmethod stream-read-sequence ((stream bgzf-input-stream) sequence
                                  &optional (start 0) end)
   (declare (optimize (speed 3) (safety 1)))
-  (macrolet ((define-copy-op (seq-type seq-accessor)
+  (macrolet ((define-copy-op (seq-type seq-accessor
+                              &key (speed 1) (safety 2))
                `(let ((seq-index start))
+                  (declare (optimize (speed ,speed) (safety ,safety)))
                   (declare (type ,seq-type sequence)
                            (type fixnum seq-index))
                     (let ((end (or end (length sequence))))
@@ -134,8 +136,17 @@ the next byte is to be read."))
                  (type bgzf-buffer-index offset num-bytes)
                  (type fixnum start))
         (typecase sequence
-          ((simple-array (unsigned-byte 8))
-           (define-copy-op (simple-array (unsigned-byte 8)) aref))
+          ((simple-array (unsigned-byte 8) (*))
+           (define-copy-op (simple-array (unsigned-byte 8) (*)) aref
+             :speed 3 :safety 0))
+          (simple-vector
+           (define-copy-op simple-vector svref
+             :speed 3 :safety 0))
+          ((simple-array * (*))
+           (define-copy-op (simple-array * (*)) aref))
+          (list
+           (define-copy-op list elt
+             :speed 3 :safety 0))
           (t
            (define-copy-op sequence elt)))))))
 
