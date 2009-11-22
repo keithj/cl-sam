@@ -33,4 +33,3 @@
                      (errno-of condition) (text-of condition))))
   (:documentation "A condition raised when an error occurs reading
   from or writing to a BGZF file."))
-
