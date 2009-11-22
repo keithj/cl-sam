@@ -246,6 +246,52 @@ of record keys and values."
                             :text (format nil "clashing tags ~a" clashes)))
                    record)))))
 
+(defun hd-record (&key (version *sam-version*) (sort-order :unsorted)
+                  (group-order :none))
+  (assert (stringp version) (version)
+          "VERSION should be a string, but was ~a" version)
+  (cons :hd (reverse (pairlis (valid-header-tags :hd)
+                              (list version sort-order group-order)))))
+
+(defun sq-record (seq-name seq-length &key assembly-identity
+                  seq-md5 seq-uri seq-species)
+  (assert (stringp seq-name)
+          (seq-name)
+          "SEQ-NAME should be a string, but was ~a" seq-name)
+  (assert (and (integerp seq-length) (plusp seq-length))
+          (seq-length)
+          "SEQ-LENGTH should be a positive integer, but was ~a" seq-length)
+  (cons :sq (remove-if #'null
+                       (mapcar (lambda (key value)
+                                 (when value
+                                   (cons key value)))
+                               (valid-header-tags :sq)
+                               (list seq-name seq-length assembly-identity
+                                     seq-md5 seq-uri seq-species)))))
+
+(defun rg-record (identity sample &key library description
+                  (platform-unit :lane) insert-size
+                  sequencing-centre sequencing-date platform-tech)
+    (assert (stringp identity)
+            (identity)
+            "IDENTITY should be a string, but was ~a" identity)
+    (assert (stringp sample)
+            (sample)
+            "SAMPLE should be a string, but was ~a" sample)
+    (assert (and (integerp insert-size) (plusp insert-size))
+            (insert-size)
+            "INSERT-SIZE should be a positive integer, but was ~a" insert-size)
+    (cons :rg
+          (remove-if #'null
+                       (mapcar (lambda (key value)
+                                 (when value
+                                   (cons key value)))
+                               (valid-header-tags :rg)
+                               (list identity sample library description
+                                     platform-unit insert-size
+                                     sequencing-centre sequencing-date
+                                     platform-tech)))))
+
 (defun merge-sam-headers (&rest headers)
   "Returns a new SAM header that is the result of merging
 HEADERS. Headers may be safely merged if none of their constituent
@@ -289,6 +335,13 @@ orders."
          (current (assoc :go (assocdr :hd sorted))))
     (subst (cons :go order) current sorted)))
 
+(defun ensure-sam-version (header &optional (version *sam-version*))
+  "Returns a copy of HEADER that is guaranteed to contain a version
+  tag."
+  (if (assoc :hd header)              ; Version is mandatory in header
+      header
+    (cons (list :hd (cons :vn version)) header)))
+
 ;;; SAM spec is silent on whether order within a record is
 ;;; important. For now we use acons and change the order because the
 ;;; spec doesn't forbid it.
@@ -296,7 +349,7 @@ orders."
   "Returns a copy of HEADER that is guaranteed to contain a sort tag
 for DOMAIN, which must be one of :sort or :group ."
   (let ((hd (or (assoc :hd header)
-                (list :hd (cons :vn "1.0")))) ; Default if :HD is absent
+                (list :hd (cons :vn *sam-version*)))) ; Default if :HD is absent
         (tag (ecase domain
                (:sort :so)
                (:group :go)))
