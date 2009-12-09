@@ -325,6 +325,7 @@ reference sequence of the first base of the clipped read."
      for (op . len) in (alignment-cigar alignment-record)
      when (member op '(:d :m :n)) sum len))
 
+(declaim (inline read-name-length))
 (defun read-name-length (alignment-record)
   "Returns the length in ASCII characters of the read name of
 ALIGNMENT-RECORD."

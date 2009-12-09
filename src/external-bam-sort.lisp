@@ -126,9 +126,6 @@ identical to a coordinate sort performed by Picard 1.07."
           (t
            (< ref1 ref2)))))
 
-;; FIXME -- does this mean we sort on reference first to move unmapped
-;; reads to the end?
-(declaim (inline alignment-name<))
 (defun alignment-name< (alignment-record1 alignment-record2)
   "Returns T if ALIGNMENT-RECORD1 sorts before ALIGNMENT-RECORD2 by
 read name. Sorting semantics of read names are not fully defined in
@@ -136,22 +133,47 @@ the SAM spec; whether you should expect natural order or numeric order
 of read name strings is not defined.
 
 This function compares numerically by read name, then by alignment
-position and finally by alignment strand."
+template region for reads paired in sequencing and finally by
+alignment strand."
   (declare (optimize (speed 3)))
   (let ((name1 (read-name alignment-record1))
         (name2 (read-name alignment-record2)))
     (declare (type simple-base-string name1 name2))
     (or (string< name1 name2)
         (and (string= name1 name2)
-             (let ((pos1 (alignment-position alignment-record1))
-                   (pos2 (alignment-position alignment-record2)))
-               (declare (type int32 pos1 pos2))
-               (or (< pos1 pos2)
-                   (and (= pos1 pos2)
-                        (and (query-forward-p
-                              (alignment-flag alignment-record1))
-                             (not (query-forward-p
-                                   (alignment-flag alignment-record2)))))))))))
+             (let ((flag1 (alignment-flag alignment-record1))
+                   (flag2 (alignment-flag alignment-record2)))
+               (or (and (sequenced-pair-p flag1)
+                        (first-in-pair-p flag1) (second-in-pair-p flag2))
+                   (and (query-forward-p flag1) (query-reverse-p flag2))))))))
+
+(defun alignment-name-natural< (alignment-record1 alignment-record2)
+  (declare (optimize (speed 3) (safety 1)))
+  (let* ((len1 (read-name-length alignment-record1))
+         (len2 (read-name-length alignment-record2))
+         (start 32)
+         (end1 (1- (+ start len1)))
+         (end2 (1- (+ start len2))))
+    (do* ((i start (1+ i))
+          (c1 (code-char (aref alignment-record1 i)))
+          (c2 (code-char (aref alignment-record2 i))))
+         ((< i (min end1 end2)))
+      (declare (type fixnum i))
+      (cond ((and (digit-char-p c1) (digit-char-p c2))
+             (multiple-value-bind (n1 j1)
+                 (parse-digits alignment-record1 i end1)
+               (multiple-value-bind (n2 j2)
+                   (parse-digits alignment-record2 i end2)
+                 (declare (type fixnum n1 n2 j1 j2))
+                 (if (< n1 n2)
+                     (return t)
+                   (setf i (min j1 j2))))))
+            ((char< c1 c2)
+             (return t))
+            ((char> c1 c2)
+             (return nil))
+            (t
+             nil)))))
 
 (defun sort-bam-file (in-filespec out-filespec
                       &key (sort-order :coordinate) (buffer-size 1000000))
@@ -203,6 +225,7 @@ alignments that will be sorted in memory at any time, defaulting to
     (external-merge-sort sort-in sort-out predicate
                          :key key :buffer-size buffer-size)))
 
+(declaim (inline %read-bam-alignment))
 (defun %read-bam-alignment (stream)
   (declare (optimize (speed 3)))
   (let ((alen-bytes (make-array 4 :element-type '(unsigned-byte 8))))
@@ -219,3 +242,17 @@ alignments that will be sorted in memory at any time, defaulting to
                         record 0)
             (read-sequence record stream)
             record))))))
+
+(let ((buffer (make-array 100 :element-type 'base-char)))
+  (defun parse-digits (bytes start end)
+    (declare (optimize (speed 3)))
+    (declare (type (simple-array (unsigned-byte 8) (*)) bytes)
+             (type fixnum start end))
+    (let ((len (- end start)))
+      (when (> len (length buffer))
+        (setf buffer (make-array len :element-type 'base-char)))
+      (loop
+         for i from start below end
+         for j = 0 then (1+ j)
+         do (setf (char buffer j) (code-char (aref bytes i)))
+         finally (return (parse-integer buffer :end j))))))
