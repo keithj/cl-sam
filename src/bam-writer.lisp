@@ -70,15 +70,22 @@ of bytes written."
     (the fixnum (+ (write-bytes bgzf alen-bytes 4)
                    (write-bytes bgzf alignment-record alen)))))
 
-(defun write-bam-meta (bgzf header num-refs ref-meta)
+(defun write-bam-meta (bgzf header num-refs ref-meta
+                       &optional (null-padding 0))
   "Writes BAM magic number and then all metadata to handle BGZF. The
 metadata consist of the HEADER string, number of reference sequences
 NUM-REFS and a list reference sequence metadata REF-META. The list
 contains one element per reference sequence, each element being a list
 of reference identifier, reference name and reference length. Returns
-the number of bytes written."
+the number of bytes written.
+
+Optional:
+
+- null-padding (fixnum): A number of null bytes to be appended to the
+end of the header string, as allowed by the SAM spec. This is useful
+for creating slack space so that BAM headers may be edited in place."
   (+ (write-bam-magic bgzf)
-     (write-bam-header bgzf header)
+     (write-bam-header bgzf header null-padding)
      (write-num-references bgzf num-refs)
      (loop
         for (nil ref-name ref-length) in ref-meta
