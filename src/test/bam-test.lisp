@@ -274,14 +274,14 @@
                                                           :first-in-pair)))))
 
 (addtest (cl-sam-tests) alignment-name</2
-  ;; Fallback to position
+  ;; Fallback to template region
   (ensure (alignment-name<
            (make-alignment-record "aaa" "acgt" (flag-bits 0 :sequenced-pair
                                                           :first-in-pair)
                                   :alignment-pos 1)
            (make-alignment-record "aaa" "acgt" (flag-bits 0 :sequenced-pair
-                                                          :first-in-pair)
-                                  :alignment-pos 2))))
+                                                          :second-in-pair)
+                                  :alignment-pos 1))))
 
 (addtest (cl-sam-tests) alignment-name</3
   ;; Fallback to strand
