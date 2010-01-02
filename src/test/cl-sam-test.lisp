@@ -1,5 +1,5 @@
 ;;;
-;;; Copyright (C) 2009 Keith James. All rights reserved.
+;;; Copyright (C) 2009-2010 Keith James. All rights reserved.
 ;;;
 ;;; This file is part of cl-sam.
 ;;;
@@ -22,21 +22,15 @@
 (deftestsuite cl-sam-tests ()
   ())
 
-(defparameter *bgzf-eof-bytes*
-  '(#o037 #o213 #o010 #o004 #o000 #o000 #o000 #o000 #o000 #o377
-    #o006 #o000 #o102 #o103 #o002 #o000 #o033 #o000 #o003 #o000
-    #o000 #o000 #o000 #o000 #o000 #o000 #o000 #o000))
-
 (defun read-raw-data (filespec)
-  (with-open-file (stream filespec :direction :input
-                          :element-type '(unsigned-byte 8))
+  (with-open-file (stream filespec :direction :input :element-type 'octet)
     (let ((data (make-array (file-length stream))))
       (read-sequence data stream)
       data)))
 
 (defun test-binary-files (filespec1 filespec2)
-  (with-open-file (s1 filespec1 :element-type '(unsigned-byte 8))
-    (with-open-file (s2 filespec2 :element-type '(unsigned-byte 8))
+  (with-open-file (s1 filespec1 :element-type 'octet)
+    (with-open-file (s2 filespec2 :element-type 'octet)
       (ensure (loop
                  for byte1 = (read-byte s1 nil nil)
                  for byte2 = (read-byte s2 nil nil)
@@ -56,10 +50,9 @@
                      for byte = (read-byte s2 nil nil)
                      while byte
                      collect byte)))
-        (ensure (or (null eof1) (equalp *bgzf-eof-bytes* eof1))
+        (ensure (or (null eof1) (equalp sam::*empty-bgzf-record* eof1))
                 :report "expected nil or ~a but found ~a"
-                :arguments (*bgzf-eof-bytes*  eof1))
-        (ensure (or (null eof2) (equalp *bgzf-eof-bytes* eof2))
+                :arguments (sam::*empty-bgzf-record* eof1))
+        (ensure (or (null eof2) (equalp sam::*empty-bgzf-record* eof2))
                 :report "expected nil or ~a but found ~a"
-                :arguments (*bgzf-eof-bytes*  eof2))))))
-
+                :arguments (sam::*empty-bgzf-record* eof2))))))

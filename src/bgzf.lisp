@@ -1,5 +1,5 @@
 ;;;
-;;; Copyright (C) 2009 Keith James. All rights reserved.
+;;; Copyright (C) 2009-2010 Keith James. All rights reserved.
 ;;;
 ;;; This file is part of cl-sam.
 ;;;
@@ -26,16 +26,24 @@
 
 (defconstant +member-header-length+ 18)
 (defconstant +member-footer-length+ 8)
-
 (defconstant +bgz-max-size+ (expt 2 16))
 
-(defvar *bgz-read-buffer* (make-array 8 :element-type '(unsigned-byte 8)
-                                      :initial-element 0)
+(defvar *empty-bgzf-record*
+  (make-array 28 :element-type 'octet
+              :initial-contents
+              '(#o037 #o213 #o010 #o004 #o000 #o000 #o000 #o000 #o000 #o377
+                #o006 #o000 #o102 #o103 #o002 #o000 #o033 #o000 #o003 #o000
+                #o000 #o000 #o000 #o000 #o000 #o000 #o000 #o000))
+  "SAMtools version >0.1.5 appends an empty BGZF record to allow
+  detection of truncated BAM files. These 28 bytes constitute such a
+  record.")
+
+(defvar *bgz-read-buffer* (make-array 8 :element-type 'octet :initial-element 0)
   "The buffer used by {defun read-bgz-member} for reading block gzip
 data. Rebind this per thread to make {defun read-bgz-member}
 re-entrant.")
 
-(defvar *bgz-write-buffer* (make-array 8 :element-type '(unsigned-byte 8)
+(defvar *bgz-write-buffer* (make-array 8 :element-type 'octet
                                        :initial-element 0)
   "The buffer used by {defun write-bgz-member} for writing block gzip
 data. Rebind this per thread to make {defun write-bgz-member}
@@ -48,8 +56,7 @@ extensions are described in RFC1952 and the SAM format specification."
   (sf2 +sf2+ :type uint8)
   (slen +slen+ :type uint16)
   (bsize 0 :type uint16)
-  (udata (make-array 0 :element-type '(unsigned-byte 8))
-         :type (simple-array (unsigned-byte 8) (*))))
+  (udata (make-array 0 :element-type 'octet) :type simple-octet-vector))
 
 (defun read-bgz-member (stream &optional (buffer *bgz-read-buffer*))
   (declare (optimize (speed 3)))
@@ -119,190 +126,123 @@ extensions are described in RFC1952 and the SAM format specification."
     bgz))
 
 (defstruct bgzf
+  (pathname nil :type t)
   (stream nil :type t)
-  (buffer (make-array +bgz-max-size+ :element-type '(unsigned-byte 8))
-          :type (simple-array (unsigned-byte 8) (*)))
+  (buffer (make-array +bgz-max-size+ :element-type 'octet)
+          :type simple-octet-vector)
   (position 0 :type (unsigned-byte 48))
   (offset 0 :type uint16)
   (pointer 0 :type uint16)
   (init nil :type t)
   (eof nil :type t))
 
-(defun bgzf-open (filespec &key (direction :input))
-  (let ((stream (open filespec :element-type '(unsigned-byte 8)
-                      :direction direction)))
-    (make-bgzf :stream stream)))
+(defmacro with-bgzf-file ((var filespec &key (direction :input)
+                               (if-exists :supersede))
+                          &body body)
+  "Executes BODY with VAR bound to a BGZF handle structure created by
+opening the file denoted by FILESPEC.
+
+Arguments:
+
+- var (symbol): The symbol to be bound.
+- filespec (pathname designator): The file to open.
+
+Key:
+
+- direction (keyword): The direction, one of either :read or :write ."
+  `(let ((,var (bgzf-open ,filespec :direction ,direction
+                          :if-exists ,if-exists)))
+    (unwind-protect
+         (progn
+           ,@body)
+      (when ,var
+        (bgzf-close ,var)))))
+
+(defun bgzf-open (filespec &key (direction :input) (if-exists :supersede))
+  "Opens a block gzip file for reading or writing.
+
+Arguments:
+
+- filespec (pathname designator): The file to open.
+
+Key:
+
+- direction (keyword): The direction, one of either :read or :write .
+
+Returns:
+
+- A BGZF structure."
+  (let ((stream (open filespec :element-type 'octet :direction direction
+                      :if-exists if-exists)))
+    (make-bgzf :stream stream :pathname filespec)))
 
 (defun bgzf-close (bgzf)
+  "Closes an open block gzip handle.
+
+Arguments:
+
+- bgzf (bgzf structure): The handle to close.
+
+Returns:
+
+- T on success."
   (let ((stream (bgzf-stream bgzf)))
     (when (output-stream-p stream)
        (bgzf-flush bgzf))
     (close stream)))
 
+(defun bgzf-open-p (bgzf)
+  (open-stream-p (bgzf-stream bgzf)))
+
 (defun bgzf-seek (bgzf position)
+  "Seeks with the file encapsulated by a block gzip handle.
+
+Arguments:
+
+- bgzf (bgzf structure): The handle to seek.
+- position (integer): The position to seek. Only values previously
+  returned by {defun bgzf-tell} may be used.
+
+Returns:
+
+- The new position."
   (let ((stream (bgzf-stream bgzf))
-        (pos (ash position -16))
-        (off (logand position #xffff)))
-    (when (file-position stream pos)
-      (setf (bgzf-position bgzf) pos
-            (bgzf-offset bgzf) off
-            (bgzf-buffer bgzf) (bgz-member-udata (read-bgz-member stream))))))
+        (new-position (ash position -16))
+        (new-offset (logand position #xffff))
+        (current-position (bgzf-position bgzf)))
+    (cond ((= current-position new-position) ; Seek within current bgz member
+           (setf (bgzf-offset bgzf) new-offset))
+          ((file-position stream new-position)
+           (setf (bgzf-buffer bgzf) (bgz-member-udata (read-bgz-member stream))
+                 (bgzf-offset bgzf) new-offset
+                 (bgzf-position bgzf) new-position))
+          (t
+           (error 'bgzf-io-error :text "failed to seek")))))
 
 (defun bgzf-tell (bgzf)
+  "Returns the current position in the encapsulated file of a block gzip
+handle.
+
+Arguments:
+
+- bgzf (bgzf structure): The handle.
+
+Returns:
+
+- The file position."
   (logior (ash (bgzf-position bgzf) 16) (bgzf-offset bgzf)))
-
-;; The algorithm below relies on a fresh udata (uncompressed data)
-;; vector being made for each bgz member as it is read. This vector is
-;; setf'd to the buffer slot in the bgzf reader struct. The vector
-;; length is used to determine where the uncompressed data end. There
-;; may be scope for a speed increase by inflating directly into the
-;; bgzf buffer. However, this would need the end index of the
-;; uncompressed data to be tracked because the bgzf buffer would
-;; always remain the same length. The current function is fast enough
-;; (faster than using the samtools bgzf shared library via CFFI), so
-;; I'm not going to do this yet.
-(defun read-bytes (bgzf n)
-  (declare (optimize (speed 3) (safety 1)))
-  (declare (type array-index n))
-  (let ((stream (bgzf-stream bgzf)))
-    (flet ((buffer-empty-p ()
-             (= (bgzf-offset bgzf) (1- (length (bgzf-buffer bgzf)))))
-           (inflate-to-buffer ()
-             (loop
-                for bgz = (read-bgz-member stream)
-                until (or (null bgz)                      ; eof
-                          (plusp (bgz-member-isize bgz))) ; skip if empty
-                finally (if bgz
-                            (let ((udata (make-array (bgz-member-isize bgz)
-                                                     :element-type
-                                                     '(unsigned-byte 8)))
-                                  (pos (file-position stream)))
-                              (check-type pos (unsigned-byte 48))
-                              (gz:inflate-vector (bgz-member-cdata bgz)
-                                                 udata :suppress-header t
-                                                 :window-bits 15)
-                              (setf (bgzf-buffer bgzf) udata
-                                    (bgzf-position bgzf) (1+ pos)
-                                    (bgzf-offset bgzf) 0)
-                              (return udata))
-                          (setf (bgzf-eof bgzf) t)))))
-      (unless (bgzf-init bgzf)
-        (inflate-to-buffer)
-        (setf (bgzf-init bgzf) t))
-      (let ((bytes (make-array n :element-type '(unsigned-byte 8))))
-        (cond ((bgzf-eof bgzf)
-               nil)
-              ((< (+ (bgzf-offset bgzf) n) (1- (length (bgzf-buffer bgzf))))
-               (replace bytes (bgzf-buffer bgzf) :start2 (bgzf-offset bgzf))
-               (if (buffer-empty-p)
-                   (inflate-to-buffer)
-                 (incf (bgzf-offset bgzf) n))
-               bytes)
-              (t
-               (loop
-                  with buffer = (bgzf-buffer bgzf)
-                  for i = 0 then (1+ i)
-                  while (< i n)
-                  do (progn
-                       (setf (aref bytes i) (aref buffer (bgzf-offset bgzf)))
-                       (if (buffer-empty-p)
-                           (setf buffer (inflate-to-buffer))
-                         (incf (bgzf-offset bgzf))))
-                  finally (return bytes))))))))
-
-(defun write-bytes (bgzf bytes n)
-  (let ((stream (bgzf-stream bgzf)))
-    (labels ((buffer-full-p ()
-               (= (bgzf-pointer bgzf) (1- (length (bgzf-buffer bgzf)))))
-             (store-overflow (num-deflated)
-               (let* ((buf (bgzf-buffer bgzf))
-                      (overflow (subseq buf num-deflated (bgzf-pointer bgzf))))
-                 (replace buf overflow)
-                 (setf (bgzf-pointer bgzf) (length overflow))))
-             (deflate-from-buffer ()
-               (let ((buf (bgzf-buffer bgzf))
-                     (cdata (make-array +bgz-max-size+ :element-type
-                                        '(unsigned-byte 8))))
-                 (multiple-value-bind (deflated bytes-in bytes-out)
-                     (gz:deflate-vector buf cdata :compression 5
-                                        :suppress-header t :window-bits 15
-                                        :backoff 1024)
-                   (declare (ignore deflated))
-                   (let* ((udata (subseq buf 0 bytes-in))
-                          (bgz (make-bgz-member
-                                :mtime (get-universal-time) :xlen +xlen+
-                                :udata buf :cdata (subseq cdata 0 bytes-out)
-                                :bsize (+ bytes-out +member-header-length+
-                                          +member-footer-length+)
-                                :isize bytes-in :crc32 (gz:crc32 udata))))
-                     (write-bgz-member bgz stream)
-                     (if (< bytes-in (length buf)) ; Didn't fit
-                         (store-overflow bytes-in)
-                       (setf (bgzf-pointer bgzf) 0))
-                     buf)))))
-      (cond ((< (+ (bgzf-pointer bgzf) n)
-                (1- (length (bgzf-buffer bgzf))))
-             (replace (bgzf-buffer bgzf) bytes :start1 (bgzf-pointer bgzf))
-             (incf (bgzf-pointer bgzf) n)
-             (when (buffer-full-p)
-               (deflate-from-buffer))
-             n)
-            (t
-             (loop
-                with buffer = (bgzf-buffer bgzf)
-                for i = 0 then (1+ i)
-                while (< i n)
-                do (progn
-                     (setf (aref buffer (bgzf-pointer bgzf)) (aref bytes i))
-                     (if (buffer-full-p)
-                         (setf buffer (deflate-from-buffer))
-                       (incf (bgzf-pointer bgzf))))
-                finally (return n)))))))
-
-(defun bgzf-flush (bgzf)
-  (if (plusp (bgzf-pointer bgzf))
-      (let ((buffer (subseq (bgzf-buffer bgzf) 0 (bgzf-pointer bgzf)))
-            (cdata (make-array +bgz-max-size+
-                               :element-type '(unsigned-byte 8))))
-        (multiple-value-bind (deflated bytes-in bytes-out)
-            (gz:deflate-vector buffer cdata :compression 5 :suppress-header t
-                               :window-bits 15 :backoff 1024)
-          (declare (ignore deflated))
-          (let* ((udata (subseq buffer 0 bytes-in))
-                 (bgz (make-bgz-member :mtime (get-universal-time)
-                                       :xlen +xlen+ :udata udata
-                                       :cdata (subseq cdata 0 bytes-out)
-                                       :bsize (+ bytes-out
-                                                 +member-header-length+
-                                                 +member-footer-length+)
-                                       :isize bytes-in
-                                       :crc32 (gz:crc32 udata))))
-            (write-bgz-member bgz (bgzf-stream bgzf))
-            (if (< bytes-in (length buffer)) ; Didn't fit
-                (let ((overflow (subseq buffer bytes-in (bgzf-pointer bgzf))))
-                  (replace buffer overflow)
-                  (setf (bgzf-pointer bgzf) (length overflow))
-                  (bgzf-flush bgzf)) ; Flush again to write the overflow
-              (setf (bgzf-pointer bgzf) 0))))))
-  (write-sequence +empty-bgzf-record+ (bgzf-stream bgzf)))
-
-(defun bgzf-virtual-position (bgzf &optional position)
-  (if position
-      (setf (bgzf-position bgzf) (ash position -16)
-            (bgzf-offset bgzf) (logand position #xffff))
-    (logior (ash (bgzf-position bgzf) 16) (bgzf-offset bgzf))))
 
 ;; As yet untested
 (defun bgzf-eof-p (bgzf)
   (let* ((stream (bgzf-stream bgzf))
          (pos (file-position stream)))
     (unwind-protect
-         (cond ((< (file-length stream) (length +empty-bgzf-record+))
+         (cond ((< (file-length stream) (length *empty-bgzf-record*))
                 (error 'bgzf-io-error :text "incomplete file"))
                ((file-position stream (- (file-length stream)
-                                         (length +empty-bgzf-record+)))
+                                         (length *empty-bgzf-record*)))
                 (loop
-                   for byte across +empty-bgzf-record+
+                   for byte across *empty-bgzf-record*
                    always (equal byte (read-byte stream))))
                (t
                 nil))

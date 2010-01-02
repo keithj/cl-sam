@@ -1,5 +1,5 @@
 ;;;
-;;; Copyright (C) 2009 Keith James. All rights reserved.
+;;; Copyright (C) 2009-2010 Keith James. All rights reserved.
 ;;;
 ;;; This program is free software: you can redistribute it and/or modify
 ;;; it under the terms of the GNU General Public License as published by
@@ -33,6 +33,7 @@
     :author "Keith James"
     :licence "GPL v3"
     :depends-on ((:version :cffi "0.10.3")
+                 (:version :deoxybyte-gzip "0.1.5")
                  (:version :deoxybyte-io "0.5.3")
                  (:version :deoxybyte-unix "0.6.1")
                  (:version :deoxybyte-utilities "0.5.3"))
@@ -43,13 +44,13 @@
               :pathname "src/"
               :components ((:file "package")
                            (:file "conditions")
-                           (:file "bgzf-ffi")
+                           (:file "bgzf")
                            (:file "bgzf-reader")
                            (:file "bgzf-writer")
                            (:file "bgzf-stream")
-                           (:file "bam-reader")
                            (:file "bam")
                            (:file "sam")
+                           (:file "bam-reader")
                            (:file "bam-writer")
                            (:file "sam-writer")
                            (:file "external-bam-sort")

@@ -1,5 +1,5 @@
 ;;;
-;;; Copyright (C) 2009 Keith James. All rights reserved.
+;;; Copyright (C) 2009-2010 Keith James. All rights reserved.
 ;;;
 ;;; This file is part of cl-sam.
 ;;;
@@ -53,10 +53,8 @@
            (let ((alignments (stable-sort alignments predicate :key key)))
              (loop
                 with out = (open (make-tmp-pathname :basename "bam-merge-sort")
-                                 :direction :io
-                                 :element-type '(unsigned-byte 8))
-                with alen-bytes = (make-array 4
-                                              :element-type '(unsigned-byte 8))
+                                 :direction :io :element-type 'octet)
+                with alen-bytes = (make-array 4 :element-type 'octet)
                 for alignment across alignments
                 do (progn
                      (encode-int32le (length
@@ -228,15 +226,14 @@ alignments that will be sorted in memory at any time, defaulting to
 (declaim (inline %read-bam-alignment))
 (defun %read-bam-alignment (stream)
   (declare (optimize (speed 3)))
-  (let ((alen-bytes (make-array 4 :element-type '(unsigned-byte 8))))
+  (let ((alen-bytes (make-array 4 :element-type 'octet)))
     (if (zerop (read-sequence alen-bytes stream))
         nil
       (let ((record-length (decode-int32le alen-bytes)))
         (if (minusp record-length)
             (error 'malformed-record-error
                    :text "BAM record reported a negative record length")
-          (let ((record (make-array record-length
-                                    :element-type '(unsigned-byte 8)
+          (let ((record (make-array record-length :element-type 'octet
                                     :initial-element 0)))
             (copy-array alen-bytes 0 3
                         record 0)
@@ -246,8 +243,8 @@ alignments that will be sorted in memory at any time, defaulting to
 (let ((buffer (make-array 100 :element-type 'base-char)))
   (defun parse-digits (bytes start end)
     (declare (optimize (speed 3)))
-    (declare (type (simple-array (unsigned-byte 8) (*)) bytes)
-             (type fixnum start end))
+    (declare (type simple-octet-vector bytes)
+             (type vector-index start end))
     (let ((len (- end start)))
       (when (> len (length buffer))
         (setf buffer (make-array len :element-type 'base-char)))

@@ -1,5 +1,5 @@
 ;;;
-;;; Copyright (C) 2009 Keith James. All rights reserved.
+;;; Copyright (C) 2009-2010 Keith James. All rights reserved.
 ;;;
 ;;; This file is part of cl-sam.
 ;;;
@@ -152,7 +152,7 @@ NUM-BYTES bytes, to STREAM."
   "Writes the quality string of ALIGNMENT-RECORD at INDEX as
 NUM-BYTES, to STREAM."
   (declare (optimize (speed 3)))
-  (declare (type (simple-array (unsigned-byte 8)) alignment-record)
+  (declare (type bam-alignment alignment-record)
            (type fixnum index num-bytes))
   (flet ((encode-phred (x)
            (code-char (+ 33 (min 93 x)))))
@@ -168,7 +168,7 @@ NUM-BYTES, to STREAM."
                          &optional (stream t))
   "Writes the auxilliary data of ALIGNMENT-RECORD at INDEX to STREAM."
   (declare (optimize (speed 3) (safety 0)))
-  (declare (type (simple-array (unsigned-byte 8)) alignment-record)
+  (declare (type bam-alignment alignment-record)
            (type fixnum index))
   (loop
      with tag-index of-type fixnum = index
@@ -223,4 +223,3 @@ NUM-BYTES, to STREAM."
              (setf tag-index (+ val-index 2))
              (write-string ":i:" stream)
              (princ (decode-int16le alignment-record val-index) stream))))))
-
