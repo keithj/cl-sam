@@ -95,7 +95,7 @@ to be:
 This function compares first by reference sequence, then alignment
 position, by alignment strand and finally by read name. The output is
 identical to a coordinate sort performed by Picard 1.07."
-  (declare (optimize (speed 3)))
+  (declare (optimize (speed 3) (safety 1)))
   (let ((ref1 (reference-id alignment-record1))
         (ref2 (reference-id alignment-record2)))
     (declare (type int32 ref1 ref2))

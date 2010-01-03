@@ -19,6 +19,11 @@
 
 (in-package :sam)
 
+(defvar *bgz-read-buffer* (make-array 4 :element-type 'octet :initial-element 0)
+  "The buffer used by {defun read-bgz-member} for reading block gzip
+data. Rebind this per thread to make {defun read-bgz-member}
+reentrant.")
+
 ;; The algorithm below relies on a fresh udata (uncompressed data)
 ;; vector being made for each bgz member as it is read. This vector is
 ;; setf'd to the buffer slot in the bgzf reader struct. The vector
@@ -50,7 +55,7 @@
                                                        :element-type 'octet))
                                     (pos (file-position stream)))
                                 (check-type pos (unsigned-byte 48))
-                                (inflate-vec (bgz-member-cdata bgz) udata)                                
+                                (inflate-vec (bgz-member-cdata bgz) udata)
                                 (setf (bgzf-buffer bgzf) udata
                                       (bgzf-position bgzf) (1+ pos)
                                       (bgzf-offset bgzf) 0)
@@ -94,3 +99,63 @@ string is null-terminated so that the terminator may be consumed."
                n)))
     (let ((bytes (read-bytes bgzf n)))
       (make-sb-string bytes 0 (1- len)))))
+
+(defun read-bgz-member (stream &optional (buffer *bgz-read-buffer*))
+  "Reads one BGZ member from STREAM.
+
+Arguments:
+
+- stream (octet input-stream): An open stream.
+
+Optional:
+
+- buffer (simple-octet-vector): A re-usable read buffer which must be
+  able to contain at least 4 bytes. Defaults to *BGZ-READ-BUFFER*
+  . This argument is only required where the the function calls must
+  be reentrant (normally achieved by rebinding *BGZ-READ-BUFFER* per
+  thread).
+
+Returns:
+
+- A BGZ structure, or NIL."
+  (declare (optimize (speed 3)))
+  (flet ((decode-bytes (s n)
+           (when (plusp (read-sequence buffer s :end n))
+             (ecase n
+               (1 (decode-uint8le buffer))
+               (2 (decode-uint16le buffer))
+               (4 (decode-uint32le buffer))))))
+    (let ((id1 (decode-bytes stream 1)))
+      (when id1
+        (let* ((id2 (decode-bytes stream 1))
+               (cm (decode-bytes stream 1))
+               (flg (decode-bytes stream 1))
+               (mtime (decode-bytes stream 4))
+               (xfl (decode-bytes stream 1))
+               (os (decode-bytes stream 1))
+               (xlen (decode-bytes stream 2))
+               (sf1 (decode-bytes stream 1))
+               (sf2 (decode-bytes stream 1))
+               (slen (decode-bytes stream 2))
+               (bsize (decode-bytes stream 2))) ; 18 header bytes
+          (declare (ignore xfl))
+          (unless (and (= gz:+id1+ id1)
+                       (= gz:+id2+ id2)
+                       (= gz:+cm-deflate+ cm)
+                       (plusp (logand flg gz:+flag-extra+))
+                       (= +xlen+ xlen)
+                       (= +sf1+ sf1)
+                       (= +sf2+ sf2)
+                       (= +slen+ slen))
+            (error 'bgzf-io-error :text "invalid BGZ header"))
+          (let* ((deflated-size (1+ (logand bsize #xffff)))
+                 (cdata-len (- deflated-size +member-header-length+
+                               +member-footer-length+))
+                 (cdata (make-array cdata-len :element-type 'octet)))
+            (read-sequence cdata stream)
+            (let* ((crc32 (decode-bytes stream 4))
+                   (isize (decode-bytes stream 4))) ; 8 footer bytes
+              (make-bgz-member :mtime mtime :os os :xlen xlen
+                               :bsize deflated-size
+                               :cdata cdata :cend cdata-len
+                               :crc32 crc32 :isize isize))))))))

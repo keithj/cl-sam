@@ -33,10 +33,10 @@
     :author "Keith James"
     :licence "GPL v3"
     :depends-on ((:version :cffi "0.10.3")
-                 (:version :deoxybyte-gzip "0.1.5")
-                 (:version :deoxybyte-io "0.5.3")
+                 (:version :deoxybyte-gzip "0.1.7")
+                 (:version :deoxybyte-io "0.5.6")
                  (:version :deoxybyte-unix "0.6.1")
-                 (:version :deoxybyte-utilities "0.5.3"))
+                 (:version :deoxybyte-utilities "0.5.6"))
     :in-order-to ((test-op (load-op :cl-sam :cl-sam-test)))
     :components
     ((:module :cl-sam
