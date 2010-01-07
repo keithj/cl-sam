@@ -1,5 +1,5 @@
 ;;;
-;;; Copyright (C) 2009 Keith James. All rights reserved.
+;;; Copyright (C) 2009-2010 Keith James. All rights reserved.
 ;;;
 ;;; This file is part of cl-sam.
 ;;;
@@ -20,7 +20,8 @@
 (in-package :cl-sam-system)
 
 (defsystem cl-sam-test
-    :depends-on (:cl-sam :lift)
+    :depends-on (:cl-sam
+                 (:version :lift "1.7.0"))
     :components ((:module :cl-sam-test
                           :serial t
                           :pathname "src/test/"

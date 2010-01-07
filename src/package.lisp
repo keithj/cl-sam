@@ -1,5 +1,5 @@
 ;;;
-;;; Copyright (C) 2009 Keith James. All rights reserved.
+;;; Copyright (C) 2009-2010 Keith James. All rights reserved.
 ;;;
 ;;; This file is part of cl-sam.
 ;;;
@@ -49,7 +49,7 @@
    #:bgzf-seek
    #:bgzf-tell
    #:bgzf-eof-p
-   #:with-bgzf-file
+   #:with-bgzf
    
    ;; BGZF stream API
    #:bgzf-stream
@@ -164,7 +164,7 @@ of editing every aspect of BAM files or creating BAM data de novo.
 The following example implements something similar to samtools
 flagstat:
 
-;;; (with-bgzf-file (bgzf \"example.bam\" :direction :input)
+;;; (with-bgzf (bgzf \"example.bam\" :direction :input)
 ;;;   (multiple-value-bind (header num-refs ref-meta)
 ;;;       (read-bam-meta bgzf)
 ;;;     (format t \"BAM header: ~s~%\" header)

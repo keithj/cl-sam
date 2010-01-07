@@ -1,5 +1,5 @@
 ;;;
-;;; Copyright (C) 2009 Keith James. All rights reserved.
+;;; Copyright (C) 2009-2010 Keith James. All rights reserved.
 ;;;
 ;;; This file is part of cl-sam.
 ;;;
@@ -19,18 +19,13 @@
 
 (in-package :sam)
 
-(defconstant +bam-magic+ (make-array 4 :element-type '(unsigned-byte 8)
-                                     :initial-contents '(66 65 77 1))
-  "The BAM file magic header bytes.")
-(defconstant +null-byte+ #x00
-  "The termination byte for BAM strings.")
-
 (defun read-bam-magic (bgzf)
   "Reads the BAM magic number from the handle BGZF and returns T if it
 is valid or raises a {define-condition malformed-file-error} if not."
   (let ((magic (read-bytes bgzf 4)))
-    (unless (equalp +bam-magic+ magic)
-      (error 'malformed-file-error :text "invalid BAM magic number"))
+    (unless (equalp *bam-magic* magic)
+      (error 'malformed-file-error :file (bgzf-pathname bgzf)
+             :text "invalid BAM magic number"))
     t))
 
 (defun read-bam-header (bgzf)
@@ -51,7 +46,8 @@ sequence described in the BAM header of handle BGZF. Two values are
 returned, the reference name as a string and the reference length as
 an integer,"
   (let ((len (decode-int32le (read-bytes bgzf 4))))
-    (values (read-string bgzf len :null-terminated t)
+    (values (ensure-valid-reference-name (read-string bgzf len
+                                                      :null-terminated t))
             (decode-int32le (read-bytes bgzf 4)))))
 
 (defun read-alignment (bgzf)
@@ -85,6 +81,5 @@ list of reference identifier, reference name and reference length."
 raising a {define-condition malformed-file-error} otherwise."
   (if (bgzf-eof-p bgzf)
       t
-    (error 'malformed-file-error
-           :file (bgzf-file bgzf)
+    (error 'malformed-file-error :file (bgzf-pathname bgzf)
            :text "BGZF EOF was missing")))

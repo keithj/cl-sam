@@ -1,5 +1,5 @@
 ;;;
-;;; Copyright (C) 2009 Keith James. All rights reserved.
+;;; Copyright (C) 2009-2010 Keith James. All rights reserved.
 ;;;
 ;;; This file is part of cl-sam.
 ;;;
@@ -21,9 +21,22 @@
 
 (defconstant +tag-size+ 2
   "The size of a BAM auxilliary tag in bytes.")
+(defconstant +null-byte+ #x00
+  "The termination byte for BAM strings.")
 
-(deftype bam-alignment ()
-  '(simple-array (unsigned-byte 8) (*)))
+(defvar *bam-magic* (make-array 4 :element-type 'octet
+                                :initial-contents '(66 65 77 1))
+  "The BAM file magic header bytes.")
+
+(declaim (type simple-base-string *invalid-read-name-chars*))
+(defvar *invalid-read-name-chars*
+  (make-array 4 :element-type 'base-char
+              :initial-contents '(#\Space #\Tab #\Linefeed #\Return)))
+
+(declaim (type simple-base-string *invalid-reference-name-chars*))
+(defvar *invalid-reference-name-chars*
+  (make-array 6 :element-type 'base-char
+              :initial-contents '(#\Space #\Tab #\Return #\Linefeed #\@ #\=)))
 
 (defgeneric encode-alignment-tag (value tag vector index)
   (:documentation "Performs binary encoding of VALUE into VECTOR under
@@ -59,7 +72,7 @@ Optional:
                      (:hex 'encode-hex-tag)
                      (:int32 'encode-int-tag)
                      (:float 'encode-float-tag)))
-        (prefix (make-array 2 :element-type '(unsigned-byte 8)
+        (prefix (make-array 2 :element-type 'octet
                             :initial-contents (loop
                                                  for c across (symbol-name tag)
                                                  collect (char-code c)))))
@@ -221,7 +234,7 @@ Returns:
                    for (nil . value) in tag-values
                    collect (alignment-tag-bytes value)))
          (alignment-record (make-array (+ n (apply #'+ sizes))
-                                       :element-type '(unsigned-byte 8))))
+                                       :element-type 'octet)))
     (encode-int32le reference-id alignment-record 0)
     (encode-int32le (or alignment-pos -1) alignment-record 4)
     (encode-int8le (1+ (length read-name)) alignment-record 8)
@@ -294,7 +307,7 @@ Returns:
           (:pcr/optical-duplicate '(10 1)))
         (setf (ldb (byte 1 bit) f) value)))))
 
-;; (declaim (ftype (function (bam-alignment) (unsigned-byte 32))
+;; (declaim (ftype (function (simple-octet-vector) (unsigned-byte 32))
 ;;                 reference-id))
 (declaim (inline reference-id))
 (defun reference-id (alignment-record)
@@ -304,7 +317,7 @@ context of a BAM file."
   (declare (optimize (speed 3)))
   (decode-int32le alignment-record 0))
 
-;; (declaim (ftype (function (bam-alignment) (unsigned-byte 32))
+;; (declaim (ftype (function (simple-octet-vector) (unsigned-byte 32))
 ;;                 alignment-position))
 (declaim (inline alignment-position))
 (defun alignment-position (alignment-record)
@@ -609,7 +622,7 @@ at INDEX."
   "Returns a string containing the alignment query sequence of length
 NUM-BYTES. The sequence must be present in ALIGNMENT-RECORD at INDEX."
   (declare (optimize (speed 3)))
-  (declare (type (simple-array (unsigned-byte 8) (*)) alignment-record)
+  (declare (type simple-octet-vector alignment-record)
            (type (unsigned-byte 32) index num-bytes))
   (flet ((decode-base (nibble)
            (ecase nibble
@@ -724,17 +737,17 @@ starting at INDEX."
   "Returns a list of auxilliary data from ALIGNMENT-RECORD at
 INDEX. The BAM two-letter data keys are transformed to Lisp keywords."
   (declare (optimize (speed 3) (safety 0)))
-  (declare (type (simple-array (unsigned-byte 8)) alignment-record)
-           (type fixnum index))
+  (declare (type simple-octet-vector alignment-record)
+           (type vector-index index))
   (loop
-     with tag-index of-type fixnum = index
+     with tag-index of-type vector-index = index
      while (< tag-index (length alignment-record))
      collect (let* ((type-index (+ tag-index +tag-size+))
                     (type-code (code-char (aref alignment-record type-index)))
                     (tag (intern (make-sb-string alignment-record tag-index
                                                  (1+ tag-index)) 'keyword))
                     (val-index (1+ type-index)))
-               (declare (type fixnum val-index))
+               (declare (type vector-index val-index))
                (let  ((val (ecase type-code
                              (#\A         ; A printable character
                               (setf tag-index (+ val-index 1))
@@ -831,6 +844,24 @@ starting at INDEX."
     ((integer -32768 32767) 5)
     ((integer -2147483648 2147483647) 7)
     ((integer 0 4294967295) 7)))
+
+(defun ensure-valid-reference-name (str)
+  (declare (optimize (speed 3)))
+  (declare (type simple-string str))
+  (flet ((invalid-char-p (char)
+           (find char *invalid-reference-name-chars* :test #'char=)))
+    (if (find-if #'invalid-char-p str)
+        (error 'malformed-field-error :field str :text "invalid reference name")
+      str)))
+
+(defun ensure-valid-read-name (str)
+  (declare (optimize (speed 3)))
+  (declare (type simple-string str))
+  (flet ((invalid-char-p (char)
+           (find char *invalid-read-name-chars* :test #'char=)))
+    (if (find-if #'invalid-char-p str)
+        (error 'malformed-field-error :field str :text "invalid read name")
+      str)))
 
 (defun ensure-valid-flag (flag &optional alignment-record)
   (cond ((mapped-proper-pair-p flag)

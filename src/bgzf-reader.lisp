@@ -1,5 +1,5 @@
 ;;;
-;;; Copyright (C) 2009 Keith James. All rights reserved.
+;;; Copyright (C) 2009-2010 Keith James. All rights reserved.
 ;;;
 ;;; This file is part of cl-sam.
 ;;;
@@ -19,140 +19,76 @@
 
 (in-package :sam)
 
-(defconstant +empty-bgzf-record+
-  #(#o037 #o213 #o010 #o004 #o000 #o000 #o000 #o000 #o000 #o377
-    #o006 #o000 #o102 #o103 #o002 #o000 #o033 #o000 #o003 #o000
-    #o000 #o000 #o000 #o000 #o000 #o000 #o000 #o000)
-    "SAMtools version >0.1.5 appends an empty BGZF record to allow
-    detection of truncated BAM files. These 28 bytes constitute such a
-    record.")
+(defvar *bgz-read-buffer* (make-array 4 :element-type 'octet :initial-element 0)
+  "The buffer used by {defun read-bgz-member} for reading block gzip
+data. Rebind this per thread to make {defun read-bgz-member}
+reentrant.")
 
-(defstruct bgzf
-  "A BGZF (block gzip file) handle.
+;; The algorithm below relies on a fresh udata (uncompressed data)
+;; vector being made for each bgz member as it is read. This vector is
+;; setf'd to the buffer slot in the bgzf reader struct. The vector
+;; length is used to determine where the uncompressed data end. There
+;; may be scope for a speed increase by inflating directly into the
+;; bgzf buffer. However, this would need the end index of the
+;; uncompressed data to be tracked because the bgzf buffer would
+;; always remain the same length. The current function is fast enough
+;; (faster than using the samtools bgzf shared library via CFFI), so
+;; I'm not going to do this yet.
 
-- file: The name of a block gzippped file.
-- ptr: A foreign pointer to a BGZF struct.
-- open-p: A flag that, while T, indicates that the foreign pointer may
-  be freed."
-  (file nil :type t)
-  (ptr nil :type t)
-  (open-p nil :type t))
-
-(defmacro with-bgzf-file ((var filespec &key (direction :input)) &body body)
-  "Executes BODY with VAR bound to a BGZF handle structure created by
-opening the file denoted by FILESPEC.
-
-Arguments:
-
-- var (symbol): The symbol to be bound.
-- filespec (pathname designator): The file to open.
-
-Key:
-
-- direction (keyword): The direction, one of either :read or :write ."
-  `(let ((,var (bgzf-open ,filespec :direction ,direction)))
-    (unwind-protect
-         (progn
-           ,@body)
-      (when ,var
-        (bgzf-close ,var)))))
-
-(defun bgzf-open (filespec &key (direction :input))
-  "Opens a block gzip file for reading or writing.
-
-Arguments:
-
-- filespec (pathname designator): The file to open.
-
-Key:
-
-- direction (keyword): The direction, one of either :read or :write .
-
-Returns:
-
-- A BGZF structure."
-  (let ((ptr (bgzf-ffi:bgzf-open (pathstring filespec) (ecase direction
-                                                         (:input "r")
-                                                         (:output "w")))))
-    (when (null-pointer-p ptr)
-      (error 'bgzf-io-error :errno unix-ffi:*c-error-number*
-             :text (format nil "failed to open ~a" filespec)))
-    (make-bgzf :file filespec :ptr ptr :open-p t)))
-
-(defun bgzf-close (bgzf)
-  "Closes an open block gzip handle.
-
-Arguments:
-
-- bgzf (bgzf structure): The handle to close.
-
-Returns:
-
-- T on success."
-  (when (bgzf-open-p bgzf)
-    (or (zerop (bgzf-ffi:bgzf-close (bgzf-ptr bgzf)))
-        (error 'bgzf-io-error :errno unix-ffi:*c-error-number*
-               :text (format nil "failed to close ~a cleanly" bgzf)))))
-
-(defun bgzf-seek (bgzf position)
-  "Seeks with the file encapsulated by a block gzip handle.
-
-Arguments:
-
-- bgzf (bgzf structure): The handle to seek.
-- position (integer): The position to seek. Only values previously
-  returned by {defun bgzf-tell} may be used.
-
-Returns:
-
-- The new position."
-  (zerop
-   (bgzf-ffi:bgzf-seek (bgzf-ptr bgzf) position
-                       (foreign-enum-value
-                        'unix-ffi:seek-directive :seek-set))))
-
-(defun bgzf-tell (bgzf)
-  "Returns the current position in the encapsulated file of a block gzip
-handle.
-
-Arguments:
-
-- bgzf (bgzf structure): The handle.
-
-Returns:
-
-- The file position."
-  (let ((position (bgzf-ffi:bgzf-tell (bgzf-ptr bgzf))))
-    (when (minusp position)
-      (error 'bgzf-io-error :errno unix-ffi:*c-error-number*
-             :text (format nil "failed to find position in ~a" bgzf)))
-    position))
-
-(defun read-bytes (bgzf n)
-  "Reads N bytes from the handle BGZF and returns them as a Lisp array
-of unsigned-byte 8. If fewer than N bytes are available an a
-{define-condition bgzf-read-error} is raised."
-  (declare (optimize (speed 3)))
-  (declare (type fixnum n))
-  (with-foreign-object (array-ptr :unsigned-char n)
-    (let ((num-read (bgzf-ffi:bgzf-read (bgzf-ptr bgzf) array-ptr n))
-          (msg "expected to read ~a bytes but ~a were available"))
-      (declare (type fixnum num-read))
-      (cond ((zerop num-read)
-             nil)
-            ((minusp num-read)
-             (error 'bgzf-io-error
-                    :text (format nil msg n 0)))
-            ((< num-read n)
-             (error 'bgzf-io-error
-                    :text (format nil msg n num-read)))
-            (t
-             (let ((buffer (make-array n :element-type '(unsigned-byte 8))))
+(defun read-bytes (bgzf n &key buffer)
+  (declare (optimize (speed 3) (safety 1)))
+  (let ((stream (bgzf-stream bgzf))
+        (num-read 0))
+    (declare (type vector-index n num-read))
+    (labels ((buffer-empty-p ()
+               (= (bgzf-offset bgzf) (1- (length (bgzf-buffer bgzf)))))
+             (inflate-vec (source dest)
+               (gz:inflate-vector source dest :suppress-header t
+                                  :window-bits 15))
+             (inflate-from-bgz ()
                (loop
-                  for i from 0 below n
-                  do (setf (aref buffer i)
-                           (mem-aref array-ptr :unsigned-char i)))
-               buffer))))))
+                  for bgz = (read-bgz-member stream)
+                  until (or (null bgz)                      ; eof
+                            (plusp (bgz-member-isize bgz))) ; skip if empty
+                  finally (if bgz
+                              (let ((udata (make-array (bgz-member-isize bgz)
+                                                       :element-type 'octet))
+                                    (pos (file-position stream)))
+                                (check-type pos (unsigned-byte 48))
+                                (inflate-vec (bgz-member-cdata bgz) udata)
+                                (setf (bgzf-buffer bgzf) udata
+                                      (bgzf-position bgzf) (1+ pos)
+                                      (bgzf-offset bgzf) 0)
+                                (return udata))
+                            (setf (bgzf-eof bgzf) t)))))
+      (unless (bgzf-init bgzf)
+        (inflate-from-bgz)
+        (setf (bgzf-init bgzf) t))
+      (let ((inflated (or buffer (make-array n :element-type 'octet))))
+        (declare (type simple-octet-vector inflated))
+        (values
+         (cond ((bgzf-eof bgzf)
+                nil)
+               ((< (+ (bgzf-offset bgzf) n) (1- (length (bgzf-buffer bgzf))))
+                (replace inflated (bgzf-buffer bgzf) :start2 (bgzf-offset bgzf))
+                (incf num-read n)
+                (if (buffer-empty-p)
+                    (inflate-from-bgz)
+                  (incf (bgzf-offset bgzf) n))
+                inflated)
+               (t
+                (loop
+                   with buf = (bgzf-buffer bgzf)
+                   for i = 0 then (1+ i)
+                   while (and buf (< i n))
+                   do (progn
+                        (setf (aref inflated i) (aref buf (bgzf-offset bgzf)))
+                        (incf num-read)
+                        (if (buffer-empty-p)
+                            (setf buf (inflate-from-bgz))
+                          (incf (bgzf-offset bgzf))))
+                   finally (return inflated))))
+         num-read)))))
 
 (defun read-string (bgzf n &key null-terminated)
   "Reads N characters from handle BGZF and returns them as a Lisp
@@ -164,7 +100,62 @@ string is null-terminated so that the terminator may be consumed."
     (let ((bytes (read-bytes bgzf n)))
       (make-sb-string bytes 0 (1- len)))))
 
-(defun bgzf-eof-p (bgzf)
-  "Returns T if the file backing handle BGZF is terminated by an empty
-record indicating EOF, or NIL otherwise."
-  (bgzf-ffi:bgzf-check-eof (bgzf-ptr bgzf)))
+(defun read-bgz-member (stream &optional (buffer *bgz-read-buffer*))
+  "Reads one BGZ member from STREAM.
+
+Arguments:
+
+- stream (octet input-stream): An open stream.
+
+Optional:
+
+- buffer (simple-octet-vector): A re-usable read buffer which must be
+  able to contain at least 4 bytes. Defaults to *BGZ-READ-BUFFER*
+  . This argument is only required where the the function calls must
+  be reentrant (normally achieved by rebinding *BGZ-READ-BUFFER* per
+  thread).
+
+Returns:
+
+- A BGZ structure, or NIL."
+  (declare (optimize (speed 3)))
+  (flet ((decode-bytes (s n)
+           (when (plusp (read-sequence buffer s :end n))
+             (ecase n
+               (1 (decode-uint8le buffer))
+               (2 (decode-uint16le buffer))
+               (4 (decode-uint32le buffer))))))
+    (let ((id1 (decode-bytes stream 1)))
+      (when id1
+        (let* ((id2 (decode-bytes stream 1))
+               (cm (decode-bytes stream 1))
+               (flg (decode-bytes stream 1))
+               (mtime (decode-bytes stream 4))
+               (xfl (decode-bytes stream 1))
+               (os (decode-bytes stream 1))
+               (xlen (decode-bytes stream 2))
+               (sf1 (decode-bytes stream 1))
+               (sf2 (decode-bytes stream 1))
+               (slen (decode-bytes stream 2))
+               (bsize (decode-bytes stream 2))) ; 18 header bytes
+          (declare (ignore xfl))
+          (unless (and (= gz:+id1+ id1)
+                       (= gz:+id2+ id2)
+                       (= gz:+cm-deflate+ cm)
+                       (plusp (logand flg gz:+flag-extra+))
+                       (= +xlen+ xlen)
+                       (= +sf1+ sf1)
+                       (= +sf2+ sf2)
+                       (= +slen+ slen))
+            (error 'bgzf-io-error :text "invalid BGZ header"))
+          (let* ((deflated-size (1+ (logand bsize #xffff)))
+                 (cdata-len (- deflated-size +member-header-length+
+                               +member-footer-length+))
+                 (cdata (make-array cdata-len :element-type 'octet)))
+            (read-sequence cdata stream)
+            (let* ((crc32 (decode-bytes stream 4))
+                   (isize (decode-bytes stream 4))) ; 8 footer bytes
+              (make-bgz-member :mtime mtime :os os :xlen xlen
+                               :bsize deflated-size
+                               :cdata cdata :cend cdata-len
+                               :crc32 crc32 :isize isize))))))))

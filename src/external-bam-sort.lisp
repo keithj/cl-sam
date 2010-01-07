@@ -1,5 +1,5 @@
 ;;;
-;;; Copyright (C) 2009 Keith James. All rights reserved.
+;;; Copyright (C) 2009-2010 Keith James. All rights reserved.
 ;;;
 ;;; This file is part of cl-sam.
 ;;;
@@ -53,14 +53,12 @@
            (let ((alignments (stable-sort alignments predicate :key key)))
              (loop
                 with out = (open (make-tmp-pathname :basename "bam-merge-sort")
-                                 :direction :io
-                                 :element-type '(unsigned-byte 8))
-                with alen-bytes = (make-array 4
-                                              :element-type '(unsigned-byte 8))
+                                 :direction :io :element-type 'octet)
+                with alen-bytes = (make-array 4 :element-type 'octet)
                 for alignment across alignments
                 do (progn
-                     (encode-int32le (length
-                                      (the bam-alignment alignment)) alen-bytes)
+                     (encode-int32le
+                      (length (the simple-octet-vector alignment)) alen-bytes)
                      (write-sequence alen-bytes out)
                      (write-sequence alignment out))
                 finally (cond ((file-position out 0)
@@ -97,7 +95,7 @@ to be:
 This function compares first by reference sequence, then alignment
 position, by alignment strand and finally by read name. The output is
 identical to a coordinate sort performed by Picard 1.07."
-  (declare (optimize (speed 3)))
+  (declare (optimize (speed 3) (safety 1)))
   (let ((ref1 (reference-id alignment-record1))
         (ref2 (reference-id alignment-record2)))
     (declare (type int32 ref1 ref2))
@@ -196,8 +194,8 @@ Returns:
 
 - The number of alignments sorted.
 - The number of files used in the external merge sort."
-  (with-bgzf-file (bgzf-in (pathstring in-filespec) :direction :input)
-    (with-bgzf-file (bgzf-out (pathstring out-filespec) :direction :output)
+  (with-bgzf (bgzf-in (pathstring in-filespec) :direction :input)
+    (with-bgzf (bgzf-out (pathstring out-filespec) :direction :output)
       (multiple-value-bind (header num-refs ref-meta)
           (read-bam-meta bgzf-in)
         (let ((predicate (ecase sort-order
@@ -228,15 +226,14 @@ alignments that will be sorted in memory at any time, defaulting to
 (declaim (inline %read-bam-alignment))
 (defun %read-bam-alignment (stream)
   (declare (optimize (speed 3)))
-  (let ((alen-bytes (make-array 4 :element-type '(unsigned-byte 8))))
+  (let ((alen-bytes (make-array 4 :element-type 'octet)))
     (if (zerop (read-sequence alen-bytes stream))
         nil
       (let ((record-length (decode-int32le alen-bytes)))
         (if (minusp record-length)
             (error 'malformed-record-error
                    :text "BAM record reported a negative record length")
-          (let ((record (make-array record-length
-                                    :element-type '(unsigned-byte 8)
+          (let ((record (make-array record-length :element-type 'octet
                                     :initial-element 0)))
             (copy-array alen-bytes 0 3
                         record 0)
@@ -246,8 +243,8 @@ alignments that will be sorted in memory at any time, defaulting to
 (let ((buffer (make-array 100 :element-type 'base-char)))
   (defun parse-digits (bytes start end)
     (declare (optimize (speed 3)))
-    (declare (type (simple-array (unsigned-byte 8) (*)) bytes)
-             (type fixnum start end))
+    (declare (type simple-octet-vector bytes)
+             (type vector-index start end))
     (let ((len (- end start)))
       (when (> len (length buffer))
         (setf buffer (make-array len :element-type 'base-char)))

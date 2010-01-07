@@ -1,5 +1,5 @@
 ;;;
-;;; Copyright (C) 2009 Keith James. All rights reserved.
+;;; Copyright (C) 2009-2010 Keith James. All rights reserved.
 ;;;
 ;;; This file is part of cl-sam.
 ;;;
@@ -19,119 +19,201 @@
 
 (in-package :sam)
 
-(defconstant +xlen+ 6)
-(defconstant +sf1+ (char-code #\B))
-(defconstant +sf2+ (char-code #\C))
-(defconstant +slen+ 2)
+(deftype bgz-payload-index ()
+  '(integer 0 65536))
 
-(defconstant +member-header-length+ 18)
-(defconstant +member-footer-length+ 8)
+(defconstant +xlen+ 6
+  "The value of the RCF1952 eXtra LENgth field used by BGZ members.")
+(defconstant +sf1+ (char-code #\B)
+  "The value of the RCF1952 first extra subfield used by BGZ members.")
+(defconstant +sf2+ (char-code #\C)
+  "The value of the RCF1952 first extra subfield used by BGZ members.")
+(defconstant +slen+ 2
+  "The value of the RFC1952 subfield length field used by BGZ members.")
 
-(defvar *bgz-read-buffer* (make-array 8 :element-type '(unsigned-byte 8)
-                                      :initial-element 0)
-  "The buffer used by {defun read-bgz-member} for reading block gzip
-data. Rebind this per thread to make {defun read-bgz-member}
-re-entrant.")
+(defconstant +member-header-length+ 18
+  "The total number of bytes in the BGZ header.")
+(defconstant +member-footer-length+ 8
+  "The total number of bytes in the BGZ footer.")
 
-(defvar *bgz-write-buffer* (make-array 8 :element-type '(unsigned-byte 8)
-                                       :initial-element 0)
-  "The buffer used by {defun write-bgz-member} for writing block gzip
-data. Rebind this per thread to make {defun write-bgz-member}
-re-entrant.")
+(defconstant +bgz-max-payload-length+ (expt 2 16)
+  "The maximium size in bytes of a BGZ member payload. This is
+  dictated by the fact that the SAM spec makes 16 bits are avaliable
+  for addressing positions with the BGZ member.")
+
+(defvar *empty-bgz-record*
+  (make-array 28 :element-type 'octet
+              :initial-contents
+              '(#o037 #o213 #o010 #o004 #o000 #o000 #o000 #o000 #o000 #o377
+                #o006 #o000 #o102 #o103 #o002 #o000 #o033 #o000 #o003 #o000
+                #o000 #o000 #o000 #o000 #o000 #o000 #o000 #o000))
+  "SAMtools version >0.1.5 appends an empty BGZF record to allow
+  detection of truncated BAM files. These 28 bytes constitute such a
+  record.")
 
 (defstruct (bgz-member (:include gz:gz-member))
-  "A gzip member with extensions, as defined by RFC1952. The
-extensions are described in RFC1952 and the SAM format specification."
-  (sf1 +sf1+ :type uint8)
-  (sf2 +sf2+ :type uint8)
-  (slen +slen+ :type uint16)
+  "A block-gzip data chunk; a gzip member with extensions, as defined
+by RFC1952. The extensions are described in RFC1952 and the SAM format
+specification.
+
+- sf1: RCF1952 first extra SubField.
+- sf2: RCF1952 second extra SubField.
+- slen: RFC1952 Subfield LENgth.
+- bsize: SAM spec total Block (member) SIZE. The serialized value is
+  bsize -1.
+- udata: Uncompressed DATA."
+  (sf1 +sf1+ :type uint8 :read-only t)
+  (sf2 +sf2+ :type uint8 :read-only t)
+  (slen +slen+ :type uint16 :read-only t)
   (bsize 0 :type uint16)
-  (udata (make-array 0 :element-type '(unsigned-byte 8))
-         :type (simple-array (unsigned-byte 8) (*))))
+  (udata (make-array 0 :element-type 'octet) :type simple-octet-vector))
 
-(defun read-bgz-member (stream &optional (buffer *bgz-read-buffer*))
-  (flet ((decode-bytes (s n)
-           (when (plusp (read-sequence buffer s :end n))
-             (ecase n
-               (1 (decode-uint8le buffer))
-               (2 (decode-uint16le buffer))
-               (4 (decode-uint32le buffer))))))
-    (let ((id1 (decode-bytes stream 1)))
-      (when id1
-        (let* ((id2 (decode-bytes stream 1))
-               (cm (decode-bytes stream 1))
-               (flg (decode-bytes stream 1))
-               (mtime (decode-bytes stream 4))
-               (xfl (decode-bytes stream 1))
-               (os (decode-bytes stream 1))
-               (xlen (decode-bytes stream 2))
-               (sf1 (decode-bytes stream 1))
-               (sf2 (decode-bytes stream 1))
-               (slen (decode-bytes stream 2))
-               (bsize (decode-bytes stream 2))) ; 18 header bytes
-          (declare (ignore xfl))
-          (assert (and (= gz:+id1+ id1)
-                       (= gz:+id2+ id2)
-                       (= gz:+cm-deflate+ cm)
-                       (not (zerop (logand gz:+flag-extra+ flg)))
-                       (= +xlen+ xlen)
-                       (= +sf1+ sf1)
-                       (= +sf2+ sf2)
-                       (= +slen+ slen)) () "Invalid block gzip header")
-          (let* ((deflated-size (1+ (logand bsize #xffff)))
-                 (cdata (make-array (- deflated-size
-                                       +member-header-length+
-                                       +member-footer-length+)
-                                    :element-type '(unsigned-byte 8))))
-            (read-sequence cdata stream)
-            (let* ((crc32 (decode-bytes stream 4))
-                   (isize (decode-bytes stream 4))) ; 8 footer bytes
-              (make-bgz-member :mtime mtime :os os :xlen xlen
-                               :bsize deflated-size
-                               :cdata cdata :crc32 crc32 :isize isize))))))))
+(defstruct bgzf
+  "A block gzip file.
 
-(defun write-bgz-member (bgz stream &optional (buffer *bgz-write-buffer*))
-  (flet ((encode-bytes (x s)
-           (let ((n (etypecase x
-                      ((unsigned-byte 8) (encode-int8le x buffer) 1)
-                      ((unsigned-byte 16) (encode-int16le x buffer) 2)
-                      ((unsigned-byte 32) (encode-int32le x buffer) 4))))
-             (write-sequence buffer s :end n))))
-    ;; Header
-    (encode-bytes (bgz-member-id1 bgz) stream)
-    (encode-bytes (bgz-member-id2 bgz) stream)
-    (encode-bytes (bgz-member-cm bgz) stream)
-    (encode-bytes (bgz-member-flg bgz) stream)
-    (encode-bytes (get-universal-time) stream)
-    (encode-bytes (bgz-member-xfl bgz) stream)
-    ;; FIXME -- I have no experience reliably detecting OS type. I'm
-    ;; sure this can be improved.
-    (encode-bytes  #+:unix gz:+os-unix+
-                   #+:windows gz:+os-ntfs-filesystem+
-                   #-(or :unix :windows) gz:+os-unknown+ stream)
-    (encode-bytes (bgz-member-xlen bgz) stream)
-    (encode-bytes (bgz-member-sf1 bgz) stream)
-    (encode-bytes (bgz-member-sf2 bgz) stream)
-    (encode-bytes (bgz-member-slen bgz) stream)
-    (encode-bytes (bgz-member-bsize bgz) stream)
-    ;; Payload
-    (write-sequence (bgz-member-cdata bgz) stream)
-    ;; Footer
-    (encode-bytes (bgz-member-crc32 bgz) stream)
-    (encode-bytes (bgz-member-isize bgz) stream)))
+- pathname: The file pathname.
+- stream: The file stream.
+- buffer: A simple-octet-vector used for buffering reads.
+- position: The file position component of the BGZF virtual file
+  offset (most significant 48 bits). This is the position in the
+  stream at which this member starts.
+- offset: The within-member offset component of the BGZF virtual file
+  offset (least significant 16 bits). This is a position within the
+  uncompressed data of the member.
 
+- init: T if the struct has been initialized (used internally in
+  decompression and reading).
 
-(defun test (filespec1 filespec2)
-  (with-open-file (stream1 filespec1 :element-type '(unsigned-byte 8))
-    (with-open-file (stream2 filespec2 :element-type '(unsigned-byte 8)
-                             :direction :output :if-exists :supersede)
-      (loop
-         for bgz = (read-bgz-member stream1)
-         while bgz
-         do (let* ((cdata (bgz-member-cdata bgz))
-                   (isize (bgz-member-isize bgz))
-                   (data (make-array isize :element-type '(unsigned-byte 8))))
-              (write-sequence
-               (gz:inflate-vector cdata data
-                                  :suppress-header t :window-bits 15) stream2))
-         count bgz))))
+- eof: T if the decompression process has reached EOF (used internally
+  in decompression and reading)."
+  (pathname nil :type t)
+  (stream nil :type t)
+  (compression 5 :type (integer 0 9))
+  (buffer (make-array +bgz-max-payload-length+ :element-type 'octet)
+          :type simple-octet-vector)
+  (position 0 :type (unsigned-byte 48))
+  (offset 0 :type uint16)
+  (pointer 0 :type uint16)
+  (init nil :type t)
+  (eof nil :type t))
+
+(defmacro with-bgzf ((var filespec &key (direction :input)
+                          (if-exists :overwrite)) &body body)
+  "Executes BODY with VAR bound to a BGZF handle structure created by
+opening the file denoted by FILESPEC.
+
+Arguments:
+
+- var (symbol): The symbol to be bound.
+- filespec (pathname designator): The file to open.
+
+Key:
+
+- direction (keyword): The direction, one of either :input or :output .
+- if-exists (keyword): Behaviour with respoect to existing
+  files. Defaults to :overwrite ."
+  `(let ((,var (bgzf-open ,filespec :direction ,direction
+                          :if-exists ,if-exists)))
+    (unwind-protect
+         (progn
+           ,@body)
+      (when ,var
+        (bgzf-close ,var)))))
+
+(defun bgzf-open (filespec &key (direction :input) compression
+                  (if-exists :overwrite))
+  "Opens a block gzip file for reading or writing.
+
+Arguments:
+
+- filespec (pathname designator): The file to open.
+
+Key:
+
+- direction (keyword): The direction, one of either :read or :write .
+- if-exists (keyword): Behaviour with respoect to existing
+  files. Defaults to :overwrite .
+
+Returns:
+
+- A BGZF structure."
+  (let ((stream (open filespec :element-type 'octet :direction direction
+                      :if-exists if-exists)))
+    (if compression
+        (make-bgzf :stream stream :pathname filespec :compression compression)
+      (make-bgzf :stream stream :pathname filespec))))
+
+(defun bgzf-close (bgzf)
+  "Closes an open block gzip file.
+
+Arguments:
+
+- bgzf (bgzf structure): The file to close.
+
+Returns:
+
+- T on success."
+  (let ((stream (bgzf-stream bgzf)))
+    (when (output-stream-p stream)
+       (bgzf-flush bgzf))
+    (close stream)))
+
+(defun bgzf-open-p (bgzf)
+  (open-stream-p (bgzf-stream bgzf)))
+
+(defun bgzf-seek (bgzf position)
+  "Seeks with the file encapsulated by a block gzip file.
+
+Arguments:
+
+- bgzf (bgzf structure): The handle to seek.
+
+- position (integer): The position to seek. Only values previously
+  returned by {defun bgzf-tell} may be used. The most significant 48
+  bits denote the real file position and the least significant 16 bits
+  the offset within the uncompressed gzip member (see the SAM spec).
+
+Returns:
+
+- The new position."
+  (let ((stream (bgzf-stream bgzf))
+        (new-position (ash position -16))
+        (new-offset (logand position #xffff))
+        (current-position (bgzf-position bgzf)))
+    (cond ((= current-position new-position) ; Seek within current bgz member
+           (setf (bgzf-offset bgzf) new-offset))
+          ((file-position stream new-position)
+           (setf (bgzf-buffer bgzf) (bgz-member-udata (read-bgz-member stream))
+                 (bgzf-offset bgzf) new-offset
+                 (bgzf-position bgzf) new-position))
+          (t
+           (error 'bgzf-io-error :text "failed to seek")))))
+
+(defun bgzf-tell (bgzf)
+  "Returns the current position in the encapsulated file of a block gzip
+file.
+
+Arguments:
+
+- bgzf (bgzf structure): The file.
+
+Returns:
+
+- The file position."
+  (logior (ash (bgzf-position bgzf) 16) (bgzf-offset bgzf)))
+
+;; As yet untested
+(defun bgzf-eof-p (bgzf)
+  (let* ((stream (bgzf-stream bgzf))
+         (pos (file-position stream)))
+    (unwind-protect
+         (cond ((< (file-length stream) (length *empty-bgz-record*))
+                (error 'bgzf-io-error :text "incomplete file"))
+               ((file-position stream (- (file-length stream)
+                                         (length *empty-bgz-record*)))
+                (loop
+                   for byte across *empty-bgz-record*
+                   always (equal byte (read-byte stream))))
+               (t
+                nil))
+      (file-position stream pos))))

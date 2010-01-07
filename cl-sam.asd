@@ -1,5 +1,5 @@
 ;;;
-;;; Copyright (C) 2009 Keith James. All rights reserved.
+;;; Copyright (C) 2009-2010 Keith James. All rights reserved.
 ;;;
 ;;; This program is free software: you can redistribute it and/or modify
 ;;; it under the terms of the GNU General Public License as published by
@@ -29,13 +29,14 @@
 
 (defsystem cl-sam
     :name "cl-sam"
-    :version "0.6.0"
+    :version "0.7.0"
     :author "Keith James"
     :licence "GPL v3"
     :depends-on ((:version :cffi "0.10.3")
-                 (:version :deoxybyte-io "0.5.3")
+                 (:version :deoxybyte-gzip "0.1.7")
+                 (:version :deoxybyte-io "0.5.6")
                  (:version :deoxybyte-unix "0.6.1")
-                 (:version :deoxybyte-utilities "0.5.3"))
+                 (:version :deoxybyte-utilities "0.5.6"))
     :in-order-to ((test-op (load-op :cl-sam :cl-sam-test)))
     :components
     ((:module :cl-sam
@@ -43,13 +44,13 @@
               :pathname "src/"
               :components ((:file "package")
                            (:file "conditions")
-                           (:file "bgzf-ffi")
+                           (:file "bgzf")
                            (:file "bgzf-reader")
                            (:file "bgzf-writer")
                            (:file "bgzf-stream")
-                           (:file "bam-reader")
                            (:file "bam")
                            (:file "sam")
+                           (:file "bam-reader")
                            (:file "bam-writer")
                            (:file "sam-writer")
                            (:file "external-bam-sort")

@@ -1,5 +1,5 @@
 ;;;
-;;; Copyright (C) 2009 Genome Research Ltd. All rights reserved.
+;;; Copyright (C) 2009-2010 Genome Research Ltd. All rights reserved.
 ;;;
 ;;; This file is part of cl-sam.
 ;;;
@@ -57,13 +57,12 @@ the next byte is to be read."))
     (:input
      (make-instance 'bgzf-input-stream
                     :bgzf (bgzf-open filespec :direction direction)
-                    :buffer (make-array +bgzf-buffer-size+
-                                        :element-type '(unsigned-byte 8)
+                    :buffer (make-array +bgzf-buffer-size+ :element-type 'octet
                                         :initial-element 0)))
     (:output (error "BGZF output streams are not implemented yet."))))
 
 (defmethod stream-element-type ((stream bgzf-stream))
-  '(unsigned-byte 8))
+  'octet)
 
 (defmethod close ((stream bgzf-stream) &key abort)
   (declare (ignore abort))
@@ -71,26 +70,18 @@ the next byte is to be read."))
     (unwind-protect 
          (if (bgzf-close (bgzf-of stream))
              t
-           (error 'bgzf-io-error :errno unix-ffi:*c-error-number*
-                  :text "failed to close file cleanly"))
+           (error 'bgzf-io-error :text "failed to close file cleanly"))
       (call-next-method))))
 
 (defmethod stream-file-position ((stream bgzf-input-stream) &optional position)
   (cond (position
-         (when (minusp (bgzf-ffi:bgzf-seek
-                        (bgzf-ptr (bgzf-of stream)) position
-                        (foreign-enum-value
-                         'unix-ffi:seek-directive :seek-set)))
-           (error 'bgzf-io-error :errno unix-ffi:*c-error-number*
-                  :text "failed to seek in file"))
+         (unless (bgzf-seek (bgzf-of stream) position)
+           (error 'bgzf-io-error :text "failed to seek in file"))
          (setf (offset-of stream) 0
                (num-bytes-of stream) 0)
          t)
         (t
-         (let ((position (bgzf-ffi:bgzf-tell (bgzf-of stream))))
-           (when (minusp position)
-             (error 'bgzf-io-error :errno unix-ffi:*c-error-number*
-                    :text "failed to find position in file"))
+         (let ((position (bgzf-tell (bgzf-of stream))))
            (- position (num-bytes-buffered stream))))))
 
 (defmethod stream-read-byte ((stream bgzf-input-stream))
@@ -104,7 +95,7 @@ the next byte is to be read."))
 
 (defmethod stream-read-sequence ((stream bgzf-input-stream) sequence
                                  &optional (start 0) end)
-  (declare (optimize (speed 3) (safety 1)))
+  ;; (declare (optimize (speed 3) (safety 1)))
   (macrolet ((define-copy-op (seq-type seq-accessor
                               &key (speed 1) (safety 2))
                `(let ((seq-index start))
@@ -136,8 +127,8 @@ the next byte is to be read."))
                  (type bgzf-buffer-index offset num-bytes)
                  (type fixnum start))
         (typecase sequence
-          ((simple-array (unsigned-byte 8) (*))
-           (define-copy-op (simple-array (unsigned-byte 8) (*)) aref
+          (simple-octet-vector
+           (define-copy-op simple-octet-vector aref
              :speed 3 :safety 0))
           (simple-vector
            (define-copy-op simple-vector svref
@@ -158,18 +149,15 @@ the next byte is to be read."))
   (- (num-bytes-of stream) (offset-of stream)))
 
 (defun fill-buffer (stream)
-  (with-accessors ((bgzf bgzf-of)
-                   (buffer buffer-of) (offset offset-of)
+  (with-accessors ((bgzf bgzf-of) (buffer buffer-of) (offset offset-of)
                    (num-bytes num-bytes-of))
       stream
+    (declare (optimize (speed 3) (safety 1)))
     (declare (type bgzf-buffer buffer))
     (let ((n (length buffer)))
-      (with-foreign-object (array-ptr :unsigned-char n)
-        (let ((num-read (bgzf-ffi:bgzf-read (bgzf-ptr bgzf) array-ptr n)))
-          (declare (optimize (speed 3) (safety 1)))
-          (declare (type bgzf-buffer-index num-read))
-          (loop
-             for i from 0 below num-read
-             do (setf (aref buffer i) (mem-aref array-ptr :unsigned-char i)))
-          (setf offset 0
-                num-bytes num-read))))))
+      (multiple-value-bind (buffer num-read)
+          (read-bytes bgzf n :buffer buffer)
+        (declare (ignore buffer))
+        (declare (type bgzf-buffer-index num-read))
+        (setf offset 0
+              num-bytes num-read)))))
