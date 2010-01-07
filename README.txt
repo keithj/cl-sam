@@ -2,8 +2,9 @@ Introduction
 
 cl-sam is a Common Lisp toolkit for manipulation of DNA sequence
 alignment data stored in the Sequence Alignment/Map (SAM) format
-<http://samtools.sourceforge.net>. It is meant to be used in
-conjunction with the SAMtools C toolkit.
+<http://samtools.sourceforge.net>. cl-sam is de novo implementation of
+the SAM spec in Common Lisp, using zlib via a C foreign function
+interface.
 
 cl-sam is able to create BAM records de novo and may be used to create
 a BAM file from scratch or edit a BAM stream. SAM/BAM header
@@ -86,8 +87,6 @@ The components of cl-sam are divided by file as follows:
  bgzf-stream.lisp  Low-level BGZF Gray stream implementation. An alternative
                    to the bgzf-reader functions, but roughly 2x slower.
 
- bgzf-ffi.lisp     Low-level C FFI interface to BGZF files.
-
 The test suite contains examples of use.
 
 
@@ -96,15 +95,9 @@ Dependencies
 deoxybyte-systems       git://github.com/keithj/deoxybyte-systems.git
 deoxybyte-utilities     git://github.com/keithj/deoxybyte-utilities.git
 deoxybyte-io            git://github.com/keithj/deoxybyte-io.git
-deoxybyte-unix          git://github.com/keithj/deoxybyte-unix.git
+deoxybyte-gzip          git://github.com/keithj/deoxybyte-gzip.git
 
 CFFI                    http://common-lisp.net/project/cffi/
-
-SAMtools                http://samtools.sourceforge.net version >= 0.1.6
-
-cl-sam requires a C shared library for block-gzip file reading. This
-is created from the SAMtools C source using the makefile provided in
-the bgzf directory of cl-sam.
 
 
 Optional dependencies
