@@ -194,8 +194,8 @@ Returns:
 
 - The number of alignments sorted.
 - The number of files used in the external merge sort."
-  (with-bgzf-file (bgzf-in (pathstring in-filespec) :direction :input)
-    (with-bgzf-file (bgzf-out (pathstring out-filespec) :direction :output)
+  (with-bgzf (bgzf-in (pathstring in-filespec) :direction :input)
+    (with-bgzf (bgzf-out (pathstring out-filespec) :direction :output)
       (multiple-value-bind (header num-refs ref-meta)
           (read-bam-meta bgzf-in)
         (let ((predicate (ecase sort-order

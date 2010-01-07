@@ -20,8 +20,7 @@
 (in-package :sam-test)
 
 (addtest (cl-sam-tests) bgzf-seek/tell/1
-  (with-bgzf-file (bgzf (merge-pathnames "data/c1215.bam")
-                        :direction :input)
+  (with-bgzf (bgzf (merge-pathnames "data/c1215.bam") :direction :input)
     (ensure (bgzf-open-p bgzf) :report "expected an open handle")
     (dotimes (n 1)
       (let* ((x (random 4096))
@@ -114,9 +113,9 @@
   (let ((expected (with-open-file (s (merge-pathnames
                                       "data/c1215_fixmate_10reads.sexp"))
                     (read s)))
-        (found (with-bgzf-file (bgzf (namestring (merge-pathnames
-                                                  "data/c1215_fixmate.bam"))
-                                     :direction :input)
+        (found (with-bgzf (bgzf (namestring (merge-pathnames
+                                             "data/c1215_fixmate.bam"))
+                                :direction :input)
                  (multiple-value-bind (header num-refs ref-meta)
                      (read-bam-meta bgzf)
                    (declare (ignore header num-refs ref-meta))
@@ -173,13 +172,16 @@
 (addtest (cl-sam-tests) pcr/optical-duplicate-p/1
   (ensure (pcr/optical-duplicate-p #x0400)))
 
-;; (addtest (cl-sam-tests) bam-round-trip/1
+;; Commented out because the data file in git is currently old style,
+;; without the EOF marker.
+
+;; (addtest (cl-sam-tests) bam-byte-round-trip/1
 ;;   (let ((in-filespec (namestring (merge-pathnames "data/c1215.bam")))
 ;;         (out-filespec (namestring
 ;;                        (make-tmp-pathname :tmpdir (merge-pathnames "data")
 ;;                                           :basename "bam-roundtrip-"))))
-;;     (with-bgzf-file (in in-filespec :direction :input)
-;;       (with-bgzf-file (out out-filespec :direction :output)
+;;     (with-bgzf (in in-filespec :direction :input)
+;;       (with-bgzf (out out-filespec :direction :output)
 ;;         (multiple-value-bind (header num-refs ref-meta)
 ;;             (read-bam-meta in)
 ;;           (write-bam-meta out header num-refs ref-meta)
@@ -190,9 +192,8 @@
 ;;     (test-binary-files in-filespec out-filespec)
 ;;     (delete-file out-filespec)))
 
-(addtest (cl-sam-tests) bam-round-trip/2
-  (with-bgzf-file (bgzf (merge-pathnames "data/c1215.bam")
-                        :direction :input)
+(addtest (cl-sam-tests) bam-semantic-round-trip/1
+  (with-bgzf (bgzf (merge-pathnames "data/c1215.bam") :direction :input)
     (multiple-value-bind (header num-refs ref-meta)
         (read-bam-meta bgzf)
       (loop
@@ -294,11 +295,10 @@
                                                           :query-reverse)
                                   :alignment-pos 1))))
 
-;; FIXME -- test the file contents!
+;; FIXME -- the correct exhaustive sort order is still not defined by
+;; the SAM spec. We will have to define our own.
 (addtest (cl-sam-tests) sort-bam-file/1
   (let ((unsorted (merge-pathnames "data/c1215.bam"))
         (sorted (merge-pathnames "data/c1215-coordinate.bam")))
-    (sort-bam-file unsorted sorted :sort-order :coordinate
-                   :buffer-size 10000)
-    (ensure (fad:file-exists-p sorted))
-    ))
+    (sort-bam-file unsorted sorted :sort-order :coordinate :buffer-size 10000)
+    (ensure (fad:file-exists-p sorted))))

@@ -20,7 +20,7 @@
 (in-package :sam)
 
 (defun view-sam (bam-filespec sam-filespec)
-  (with-bgzf-file (bgzf bam-filespec)
+  (with-bgzf (bgzf bam-filespec)
     (with-open-file (out sam-filespec
                          :direction :output :element-type 'base-char
                          :external-format :ascii
@@ -45,7 +45,7 @@
        finally (return total))))
 
 (defun flagstat (bam-filespec)
-  (with-bgzf-file (bgzf bam-filespec :direction :input)
+  (with-bgzf (bgzf bam-filespec :direction :input)
     (read-bam-meta bgzf)
     (loop
        for alignment = (read-alignment bgzf)
@@ -78,4 +78,3 @@
                        (* 100 (/ proper-paired total))
                        both-mapped singletons
                        (* 100 (/ singletons total))))))
-

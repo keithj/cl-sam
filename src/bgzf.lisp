@@ -97,9 +97,8 @@ specification.
   (init nil :type t)
   (eof nil :type t))
 
-(defmacro with-bgzf-file ((var filespec &key (direction :input)
-                               (if-exists :supersede))
-                          &body body)
+(defmacro with-bgzf ((var filespec &key (direction :input)
+                          (if-exists :overwrite)) &body body)
   "Executes BODY with VAR bound to a BGZF handle structure created by
 opening the file denoted by FILESPEC.
 
@@ -110,7 +109,9 @@ Arguments:
 
 Key:
 
-- direction (keyword): The direction, one of either :read or :write ."
+- direction (keyword): The direction, one of either :input or :output .
+- if-exists (keyword): Behaviour with respoect to existing
+  files. Defaults to :overwrite ."
   `(let ((,var (bgzf-open ,filespec :direction ,direction
                           :if-exists ,if-exists)))
     (unwind-protect
@@ -120,7 +121,7 @@ Key:
         (bgzf-close ,var)))))
 
 (defun bgzf-open (filespec &key (direction :input) compression
-                  (if-exists :supersede))
+                  (if-exists :overwrite))
   "Opens a block gzip file for reading or writing.
 
 Arguments:
@@ -130,6 +131,8 @@ Arguments:
 Key:
 
 - direction (keyword): The direction, one of either :read or :write .
+- if-exists (keyword): Behaviour with respoect to existing
+  files. Defaults to :overwrite .
 
 Returns:
 
@@ -141,11 +144,11 @@ Returns:
       (make-bgzf :stream stream :pathname filespec))))
 
 (defun bgzf-close (bgzf)
-  "Closes an open block gzip handle.
+  "Closes an open block gzip file.
 
 Arguments:
 
-- bgzf (bgzf structure): The handle to close.
+- bgzf (bgzf structure): The file to close.
 
 Returns:
 
@@ -159,13 +162,16 @@ Returns:
   (open-stream-p (bgzf-stream bgzf)))
 
 (defun bgzf-seek (bgzf position)
-  "Seeks with the file encapsulated by a block gzip handle.
+  "Seeks with the file encapsulated by a block gzip file.
 
 Arguments:
 
 - bgzf (bgzf structure): The handle to seek.
+
 - position (integer): The position to seek. Only values previously
-  returned by {defun bgzf-tell} may be used.
+  returned by {defun bgzf-tell} may be used. The most significant 48
+  bits denote the real file position and the least significant 16 bits
+  the offset within the uncompressed gzip member (see the SAM spec).
 
 Returns:
 
@@ -185,11 +191,11 @@ Returns:
 
 (defun bgzf-tell (bgzf)
   "Returns the current position in the encapsulated file of a block gzip
-handle.
+file.
 
 Arguments:
 
-- bgzf (bgzf structure): The handle.
+- bgzf (bgzf structure): The file.
 
 Returns:
 
