@@ -88,6 +88,7 @@ specification.
   in decompression and reading)."
   (pathname nil :type t)
   (stream nil :type t)
+  (compression 5 :type (integer 0 9))
   (buffer (make-array +bgz-max-payload-length+ :element-type 'octet)
           :type simple-octet-vector)
   (position 0 :type (unsigned-byte 48))
@@ -118,7 +119,8 @@ Key:
       (when ,var
         (bgzf-close ,var)))))
 
-(defun bgzf-open (filespec &key (direction :input) (if-exists :supersede))
+(defun bgzf-open (filespec &key (direction :input) compression
+                  (if-exists :supersede))
   "Opens a block gzip file for reading or writing.
 
 Arguments:
@@ -134,7 +136,9 @@ Returns:
 - A BGZF structure."
   (let ((stream (open filespec :element-type 'octet :direction direction
                       :if-exists if-exists)))
-    (make-bgzf :stream stream :pathname filespec)))
+    (if compression
+        (make-bgzf :stream stream :pathname filespec :compression compression)
+      (make-bgzf :stream stream :pathname filespec))))
 
 (defun bgzf-close (bgzf)
   "Closes an open block gzip handle.

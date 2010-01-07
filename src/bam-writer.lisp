@@ -19,11 +19,11 @@
 
 (in-package :sam)
 
-(defun write-bam-magic (bgzf)
+(defun write-bam-magic (bgzf &key (compress t))
   "Writes the BAM magic number to the handle BGZF."
-  (write-bytes bgzf *bam-magic* (length *bam-magic*)))
+  (write-bytes bgzf *bam-magic* (length *bam-magic*) :compress compress))
 
-(defun write-bam-header (bgzf header &optional (null-padding 0))
+(defun write-bam-header (bgzf header &key (compress t) (null-padding 0))
   "Writes the BAM header string HEADER to handle BGZF, followed by
 padding of NULL-PADDING null bytes. This function also writes the
 header length, including padding, in the 4 bytes preceding the
@@ -35,7 +35,7 @@ header."
     (encode-int32le (+ hlen null-padding) buffer)
     (when (plusp hlen)
       (copy-array header 0 (1- hlen) buffer 4 #'char-code))
-    (write-bytes bgzf buffer (length buffer))))
+    (write-bytes bgzf buffer (length buffer) :compress compress)))
 
 (defun write-num-references (bgzf n)
   "Writes the number of reference sequences N to handle BGZF."
@@ -62,15 +62,15 @@ of length REF-LENGTH bases, to handle BGZF."
   "Writes one ALIGNMENT-RECORD to handle BGZF and returns the number
 of bytes written."
   (declare (optimize (speed 3)))
-  (declare (type bam-alignment alignment-record))
+  (declare (type simple-octet-vector alignment-record))
   (let ((alen (length alignment-record))
         (alen-bytes (make-array 4 :element-type 'octet)))
     (encode-int32le alen alen-bytes)
     (the fixnum (+ (write-bytes bgzf alen-bytes 4)
                    (write-bytes bgzf alignment-record alen)))))
 
-(defun write-bam-meta (bgzf header num-refs ref-meta
-                       &optional (null-padding 0))
+(defun write-bam-meta (bgzf header num-refs ref-meta &key (compress t)
+                       (null-padding 0))
   "Writes BAM magic number and then all metadata to handle BGZF. The
 metadata consist of the HEADER string, number of reference sequences
 NUM-REFS and a list reference sequence metadata REF-META. The list
@@ -83,8 +83,13 @@ Optional:
 - null-padding (fixnum): A number of null bytes to be appended to the
 end of the header string, as allowed by the SAM spec. This is useful
 for creating slack space so that BAM headers may be edited in place."
-  (+ (write-bam-magic bgzf)
-     (write-bam-header bgzf header null-padding)
+  (+ (write-bam-magic bgzf :compress compress)
+     (write-bam-header bgzf header :compress compress
+                       :null-padding null-padding)
+
+     ;; Unless compressing, flush here to move to the next bgz member,
+     ;; leaving the magic number and header uncompressed.
+     
      (write-num-references bgzf num-refs)
      (loop
         for (nil ref-name ref-length) in ref-meta

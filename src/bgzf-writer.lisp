@@ -26,8 +26,8 @@ data. Rebind this per thread to make {defun write-bgz-member}
 reentrant.")
 
 (declaim (ftype (function (bgzf simple-octet-vector vector-index
-                           &key (:compression fixnum)) fixnum) write-bytes))
-(defun write-bytes (bgzf bytes n &key (compression 5))
+                                &key (:compress t)) fixnum) write-bytes))
+(defun write-bytes (bgzf bytes n &key (compress t))
   (declare (optimize (speed 3) (safety 1)))
   (let ((stream (bgzf-stream bgzf)))
     (declare (type simple-octet-vector bytes)
@@ -44,9 +44,11 @@ reentrant.")
                      (cdata (make-array +bgz-max-payload-length+
                                         :element-type 'octet)))
                  (multiple-value-bind (deflated bytes-in bytes-out)
-                     (gz:deflate-vector buf cdata :compression compression
-                                        :suppress-header t :window-bits 15
-                                        :backoff 1024)
+                     (gz:deflate-vector buf cdata
+                       :compression (if compress
+                                        (bgzf-compression bgzf)
+                                      0)
+                       :suppress-header t :window-bits 15 :backoff 1024)
                    (declare (ignore deflated))
                    (declare (type bgz-payload-index bytes-in bytes-out))
                    (let* ((udata (subseq buf 0 bytes-in))
@@ -80,13 +82,16 @@ reentrant.")
                        (incf (bgzf-pointer bgzf))))
                 finally (return n)))))))
 
-(defun bgzf-flush (bgzf)
+(defun bgzf-flush (bgzf &key (compress t) (append-eof t))
   (if (plusp (bgzf-pointer bgzf))
       (let ((buffer (subseq (bgzf-buffer bgzf) 0 (bgzf-pointer bgzf)))
             (cdata (make-array +bgz-max-payload-length+ :element-type 'octet)))
         (multiple-value-bind (deflated bytes-in bytes-out)
-            (gz:deflate-vector buffer cdata :compression 5 :suppress-header t
-                               :window-bits 15 :backoff 1024)
+            (gz:deflate-vector buffer cdata
+              :compression (if compress
+                               (bgzf-compression bgzf)
+                             0)
+              :suppress-header t :window-bits 15 :backoff 1024)
           (declare (ignore deflated))
           (let* ((udata (subseq buffer 0 bytes-in))
                  (bgz (make-bgz-member :mtime (get-universal-time)
@@ -104,7 +109,8 @@ reentrant.")
                   (setf (bgzf-pointer bgzf) (length overflow))
                   (bgzf-flush bgzf)) ; Flush again to write the overflow
               (setf (bgzf-pointer bgzf) 0))))))
-  (write-sequence *empty-bgz-record* (bgzf-stream bgzf)))
+  (when append-eof
+    (write-sequence *empty-bgz-record* (bgzf-stream bgzf))))
 
 (defun write-bgz-member (bgz stream &optional (buffer *bgz-write-buffer*))
   "Writes one BGZ member to STREAM.

@@ -152,8 +152,8 @@ NUM-BYTES bytes, to STREAM."
   "Writes the quality string of ALIGNMENT-RECORD at INDEX as
 NUM-BYTES, to STREAM."
   (declare (optimize (speed 3)))
-  (declare (type bam-alignment alignment-record)
-           (type fixnum index num-bytes))
+  (declare (type simple-octet-vector alignment-record)
+           (type vector-index index num-bytes))
   (flet ((encode-phred (x)
            (code-char (+ 33 (min 93 x)))))
     (if (= #xff (aref alignment-record index))
@@ -168,8 +168,8 @@ NUM-BYTES, to STREAM."
                          &optional (stream t))
   "Writes the auxilliary data of ALIGNMENT-RECORD at INDEX to STREAM."
   (declare (optimize (speed 3) (safety 0)))
-  (declare (type bam-alignment alignment-record)
-           (type fixnum index))
+  (declare (type simple-octet-vector alignment-record)
+           (type vector-index index))
   (loop
      with tag-index of-type fixnum = index
      while (< tag-index (length alignment-record))

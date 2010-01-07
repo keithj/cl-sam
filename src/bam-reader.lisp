@@ -46,7 +46,8 @@ sequence described in the BAM header of handle BGZF. Two values are
 returned, the reference name as a string and the reference length as
 an integer,"
   (let ((len (decode-int32le (read-bytes bgzf 4))))
-    (values (read-string bgzf len :null-terminated t)
+    (values (ensure-valid-reference-name (read-string bgzf len
+                                                      :null-terminated t))
             (decode-int32le (read-bytes bgzf 4)))))
 
 (defun read-alignment (bgzf)
@@ -82,4 +83,3 @@ raising a {define-condition malformed-file-error} otherwise."
       t
     (error 'malformed-file-error :file (bgzf-pathname bgzf)
            :text "BGZF EOF was missing")))
-

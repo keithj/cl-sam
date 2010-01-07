@@ -57,8 +57,8 @@
                 with alen-bytes = (make-array 4 :element-type 'octet)
                 for alignment across alignments
                 do (progn
-                     (encode-int32le (length
-                                      (the bam-alignment alignment)) alen-bytes)
+                     (encode-int32le
+                      (length (the simple-octet-vector alignment)) alen-bytes)
                      (write-sequence alen-bytes out)
                      (write-sequence alignment out))
                 finally (cond ((file-position out 0)
