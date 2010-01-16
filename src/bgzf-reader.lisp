@@ -52,7 +52,8 @@ reentrant.")
                             (plusp (bgz-member-isize bgz))) ; skip if empty
                   finally (if bgz
                               (let ((udata (make-array (bgz-member-isize bgz)
-                                                       :element-type 'octet))
+                                                       :element-type 'octet
+                                                       :initial-element 0))
                                     (pos (file-position stream)))
                                 (check-type pos (unsigned-byte 48))
                                 (inflate-vec (bgz-member-cdata bgz) udata)
@@ -64,7 +65,8 @@ reentrant.")
       (unless (bgzf-init bgzf)
         (inflate-from-bgz)
         (setf (bgzf-init bgzf) t))
-      (let ((inflated (or buffer (make-array n :element-type 'octet))))
+      (let ((inflated (or buffer (make-array n :element-type 'octet
+                                             :initial-element 0))))
         (declare (type simple-octet-vector inflated))
         (values
          (cond ((bgzf-eof bgzf)
@@ -151,7 +153,8 @@ Returns:
           (let* ((deflated-size (1+ (logand bsize #xffff)))
                  (cdata-len (- deflated-size +member-header-length+
                                +member-footer-length+))
-                 (cdata (make-array cdata-len :element-type 'octet)))
+                 (cdata (make-array cdata-len :element-type 'octet
+                                    :initial-element 0)))
             (read-sequence cdata stream)
             (let* ((crc32 (decode-bytes stream 4))
                    (isize (decode-bytes stream 4))) ; 8 footer bytes

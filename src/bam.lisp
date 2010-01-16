@@ -234,7 +234,8 @@ Returns:
                    for (nil . value) in tag-values
                    collect (alignment-tag-bytes value)))
          (alignment-record (make-array (+ n (apply #'+ sizes))
-                                       :element-type 'octet)))
+                                       :element-type 'octet
+                                       :initial-element 0)))
     (encode-int32le reference-id alignment-record 0)
     (encode-int32le (or alignment-pos -1) alignment-record 4)
     (encode-int8le (1+ (length read-name)) alignment-record 8)
@@ -633,7 +634,8 @@ NUM-BYTES. The sequence must be present in ALIGNMENT-RECORD at INDEX."
              (8 #\T)
              (15 #\N))))
     (loop
-       with seq = (make-array num-bytes :element-type 'base-char)
+       with seq = (make-array num-bytes :element-type 'base-char
+                              :initial-element #\Nul)
        for i from 0 below num-bytes
        for j of-type uint32 = (+ index (floor i 2))
        do (setf (char seq i)
@@ -673,7 +675,8 @@ NIL is returned."
     (if (= #xff (aref alignment-record index))
         nil
       (loop
-         with str = (make-array num-bytes :element-type 'base-char)
+         with str = (make-array num-bytes :element-type 'base-char
+                                :initial-element #\Nul)
          for i from 0 below num-bytes
          for j from index below (+ index num-bytes)
          do (setf (char str i)

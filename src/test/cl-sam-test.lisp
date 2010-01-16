@@ -22,12 +22,6 @@
 (deftestsuite cl-sam-tests ()
   ())
 
-(defun read-raw-data (filespec)
-  (with-open-file (stream filespec :direction :input :element-type 'octet)
-    (let ((data (make-array (file-length stream))))
-      (read-sequence data stream)
-      data)))
-
 (defun test-binary-files (filespec1 filespec2)
   (with-open-file (s1 filespec1 :element-type 'octet)
     (with-open-file (s2 filespec2 :element-type 'octet)

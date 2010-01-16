@@ -42,7 +42,8 @@ reentrant.")
              (deflate-to-bgz ()
                (let ((buf (bgzf-buffer bgzf))
                      (cdata (make-array +bgz-max-payload-length+
-                                        :element-type 'octet)))
+                                        :element-type 'octet
+                                        :initial-element 0)))
                  (multiple-value-bind (deflated bytes-in bytes-out)
                      (gz:deflate-vector buf cdata
                        :compression (if compress
@@ -85,7 +86,8 @@ reentrant.")
 (defun bgzf-flush (bgzf &key (compress t) (append-eof t))
   (if (plusp (bgzf-pointer bgzf))
       (let ((buffer (subseq (bgzf-buffer bgzf) 0 (bgzf-pointer bgzf)))
-            (cdata (make-array +bgz-max-payload-length+ :element-type 'octet)))
+            (cdata (make-array +bgz-max-payload-length+ :element-type 'octet
+                               :initial-element 0)))
         (multiple-value-bind (deflated bytes-in bytes-out)
             (gz:deflate-vector buffer cdata
               :compression (if compress

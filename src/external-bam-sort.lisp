@@ -43,7 +43,8 @@
 (defmethod make-merge-stream ((stream bam-sort-input-stream) predicate
                               &key key (buffer-size 100000))
   (declare (optimize (speed 3)))
-  (let ((alignments (make-array buffer-size :adjustable t :fill-pointer 0)))
+  (let ((alignments (make-array buffer-size :adjustable t :fill-pointer 0
+                                :initial-element 0)))
     (loop
        for i from 0 below buffer-size
        for alignment = (stream-read-element stream)
@@ -54,7 +55,8 @@
              (loop
                 with out = (open (make-tmp-pathname :basename "bam-merge-sort")
                                  :direction :io :element-type 'octet)
-                with alen-bytes = (make-array 4 :element-type 'octet)
+                with alen-bytes = (make-array 4 :element-type 'octet
+                                              :initial-element 0)
                 for alignment across alignments
                 do (progn
                      (encode-int32le
@@ -146,7 +148,7 @@ alignment strand."
                    (and (query-forward-p flag1) (query-reverse-p flag2))))))))
 
 (defun alignment-name-natural< (alignment-record1 alignment-record2)
-  (declare (optimize (speed 3) (safety 1)))
+  (declare (optimize (speed 3) (safety 0)))
   (let* ((len1 (read-name-length alignment-record1))
          (len2 (read-name-length alignment-record2))
          (start 32)
@@ -195,7 +197,8 @@ Returns:
 - The number of alignments sorted.
 - The number of files used in the external merge sort."
   (with-bgzf (bgzf-in (pathstring in-filespec) :direction :input)
-    (with-bgzf (bgzf-out (pathstring out-filespec) :direction :output)
+    (with-bgzf (bgzf-out (pathstring out-filespec) :direction :output
+                         :if-exists :supersede)
       (multiple-value-bind (header num-refs ref-meta)
           (read-bam-meta bgzf-in)
         (let ((predicate (ecase sort-order
@@ -226,7 +229,8 @@ alignments that will be sorted in memory at any time, defaulting to
 (declaim (inline %read-bam-alignment))
 (defun %read-bam-alignment (stream)
   (declare (optimize (speed 3)))
-  (let ((alen-bytes (make-array 4 :element-type 'octet)))
+  (let ((alen-bytes (make-array 4 :element-type 'octet
+                                :initial-element 0)))
     (if (zerop (read-sequence alen-bytes stream))
         nil
       (let ((record-length (decode-int32le alen-bytes)))
@@ -240,14 +244,15 @@ alignments that will be sorted in memory at any time, defaulting to
             (read-sequence record stream)
             record))))))
 
-(let ((buffer (make-array 100 :element-type 'base-char)))
+(let ((buffer (make-array 100 :element-type 'base-char :initial-element #\Nul)))
   (defun parse-digits (bytes start end)
     (declare (optimize (speed 3)))
     (declare (type simple-octet-vector bytes)
              (type vector-index start end))
     (let ((len (- end start)))
       (when (> len (length buffer))
-        (setf buffer (make-array len :element-type 'base-char)))
+        (setf buffer (make-array len :element-type 'base-char
+                                 :initial-element #\Nul)))
       (loop
          for i from start below end
          for j = 0 then (1+ j)

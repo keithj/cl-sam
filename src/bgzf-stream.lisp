@@ -93,9 +93,40 @@ the next byte is to be read."))
           (aref buffer offset)
         (incf offset)))))
 
+#+(or :sbcl :ccl)
 (defmethod stream-read-sequence ((stream bgzf-input-stream) sequence
                                  &optional (start 0) end)
-  ;; (declare (optimize (speed 3) (safety 1)))
+  (%stream-read-sequence stream sequence start end))
+
+#+lispworks
+(defmethod stream-read-sequence ((stream bgzf-input-stream) sequence
+                                 start end)
+  (%stream-read-sequence stream sequence start end))
+
+(defun buffer-empty-p (stream)
+  (declare (optimize (speed 3) (safety 1)))
+  (= (the fixnum (offset-of stream)) (the fixnum (num-bytes-of stream))))
+
+(defun num-bytes-buffered (stream)
+  (- (num-bytes-of stream) (offset-of stream)))
+
+(defun fill-buffer (stream)
+  (with-accessors ((bgzf bgzf-of) (buffer buffer-of) (offset offset-of)
+                   (num-bytes num-bytes-of))
+      stream
+    (declare (optimize (speed 3) (safety 1)))
+    (declare (type bgzf-buffer buffer))
+    (let ((n (length buffer)))
+      (multiple-value-bind (buffer num-read)
+          (read-bytes bgzf n :buffer buffer)
+        (declare (ignore buffer))
+        (declare (type bgzf-buffer-index num-read))
+        (setf offset 0
+              num-bytes num-read)))))
+
+;; (declaim (inline %stream-read-sequence))
+(defun %stream-read-sequence (stream sequence &optional (start 0) end)
+   ;; (declare (optimize (speed 3) (safety 1)))
   (macrolet ((define-copy-op (seq-type seq-accessor
                               &key (speed 1) (safety 2))
                `(let ((seq-index start))
@@ -140,24 +171,3 @@ the next byte is to be read."))
              :speed 3 :safety 0))
           (t
            (define-copy-op sequence elt)))))))
-
-(defun buffer-empty-p (stream)
-  (declare (optimize (speed 3) (safety 1)))
-  (= (the fixnum (offset-of stream)) (the fixnum (num-bytes-of stream))))
-
-(defun num-bytes-buffered (stream)
-  (- (num-bytes-of stream) (offset-of stream)))
-
-(defun fill-buffer (stream)
-  (with-accessors ((bgzf bgzf-of) (buffer buffer-of) (offset offset-of)
-                   (num-bytes num-bytes-of))
-      stream
-    (declare (optimize (speed 3) (safety 1)))
-    (declare (type bgzf-buffer buffer))
-    (let ((n (length buffer)))
-      (multiple-value-bind (buffer num-read)
-          (read-bytes bgzf n :buffer buffer)
-        (declare (ignore buffer))
-        (declare (type bgzf-buffer-index num-read))
-        (setf offset 0
-              num-bytes num-read)))))

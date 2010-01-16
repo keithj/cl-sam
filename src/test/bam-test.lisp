@@ -47,30 +47,31 @@
             :report "failed to close handle")))
 
 (addtest (cl-sam-tests) bgzf-stream-read-byte/1
-  (let ((stream (bgzf-stream-open (merge-pathnames "data/c1215.bam")
-                                  :direction :input))
-        (raw-data (read-raw-data (merge-pathnames "data/c1215.dat"))))
-    (ensure (loop
-               for i from 0 below (length raw-data)
-               for byte = (stream-read-byte stream)
-               always (= (aref raw-data i) byte)))
-    (ensure (eql :eof (stream-read-byte stream))
-            :report "expected stream to be at EOF.")
-    (ensure (close stream)
-            :report "failed to close stream")))
+  (with-open-file (raw (merge-pathnames "data/c1215.dat")
+                       :element-type 'octet)
+    (let ((stream (bgzf-stream-open (merge-pathnames "data/c1215.bam")
+                                    :direction :input)))
+      (ensure (loop
+                 for byte = (stream-read-byte stream)
+                 until (eql :eof byte)
+                 always (= (read-byte raw) byte)))
+      (ensure (eql :eof (read-byte raw nil :eof))
+              :report "expected raw data stream to be at EOF.")
+      (ensure (close stream) :report "failed to close stream"))))
 
 (addtest (cl-sam-tests) bgzf-stream-read-sequence/1
-  (let ((stream (bgzf-stream-open (merge-pathnames "data/c1215.bam")
-                                  :direction :input))
-        (raw-data (read-raw-data (merge-pathnames "data/c1215.dat")))
-        (buffer (make-array 100 :element-type 'octet :initial-element 0)))
-    (ensure (loop
-               for i from 0 below (length raw-data) by 100
-               for j = (stream-read-sequence stream buffer 0 100)
-               always (equalp (subseq raw-data i (+ i j))
-                              (subseq buffer 0 j))))
-    (ensure (close stream)
-            :report "failed to close stream")))
+  (with-open-file (raw (merge-pathnames "data/c1215.dat")
+                       :element-type 'octet)
+    (let ((stream (bgzf-stream-open (merge-pathnames "data/c1215.bam")
+                                    :direction :input))
+          (buffer1 (make-array 100 :element-type 'octet :initial-element 0))
+          (buffer2 (make-array 100 :element-type 'octet :initial-element 0)))
+      (ensure (loop
+                 for i from 0 below (file-length raw) by 100
+                 for j = (stream-read-sequence stream buffer1 0 100)
+                 for k = (read-sequence buffer2 raw :start 0 :end 100)
+                 always (equalp buffer1 buffer2)))
+      (ensure (close stream) :report "failed to close stream"))))
 
 (addtest (cl-sam-tests) bam-parse/1
   (let* ((filespec (merge-pathnames "data/c1215.bam"))
@@ -212,9 +213,15 @@
                          :cigar (alignment-cigar aln)
                          :quality-str (quality-string aln)
                          :tag-values (alignment-tag-values aln))))
+              (loop
+               for i from 0 below (length aln)
+               do (ensure (= (aref aln i) (aref aln2 i))
+                          :report "different bytes at ~d: ~a -> ~a in ~a ~a"
+                          :arguments (i (aref aln i) (aref aln2 i) aln aln2)))
               (ensure (equalp aln aln2)
-                      :report "expected ~a but found ~a"
-                      :arguments (aln aln2)))))))
+                      :report "expected ~a giving ~a but found ~a giving ~a"
+                      :arguments (aln (alignment-core-alist aln)
+                                  aln2 (alignment-core-alist aln2))))))))
 
 (addtest (cl-sam-tests) alignment-record</1
   ;; Unmapped (no reference) sort last
