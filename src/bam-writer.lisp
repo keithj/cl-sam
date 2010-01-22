@@ -34,7 +34,8 @@ header."
     ;; store header length, including padding
     (encode-int32le (+ hlen null-padding) buffer)
     (when (plusp hlen)
-      (copy-array header 0 (1- hlen) buffer 4 #'char-code))
+      (copy-array header 0 (1- hlen)
+                  buffer 4 #'char-code))
     (write-bytes bgzf buffer (length buffer) :compress compress)))
 
 (defun write-num-references (bgzf n)
@@ -64,7 +65,7 @@ of bytes written."
   (declare (optimize (speed 3)))
   (declare (type simple-octet-vector alignment-record))
   (let ((alen (length alignment-record))
-        (alen-bytes (make-array 4 :element-type 'octet)))
+        (alen-bytes (make-array 4 :element-type 'octet :initial-element 0)))
     (encode-int32le alen alen-bytes)
     (the fixnum (+ (write-bytes bgzf alen-bytes 4)
                    (write-bytes bgzf alignment-record alen)))))

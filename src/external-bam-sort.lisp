@@ -42,14 +42,19 @@
 
 (defmethod make-merge-stream ((stream bam-sort-input-stream) predicate
                               &key key (buffer-size 100000))
-  (declare (optimize (speed 3)))
-  (let ((alignments (make-array buffer-size :adjustable t :fill-pointer 0
-                                :initial-element 0)))
-    (loop
-       for i from 0 below buffer-size
-       for alignment = (stream-read-element stream)
-       while alignment
-       do (vector-push alignment alignments))
+  (declare (optimize (speed 3) (safety 1)))
+  (declare (type vector-index buffer-size))
+  (let ((alignments (loop
+                       with buf = (make-array buffer-size :element-type t
+                                              :initial-element nil)
+                       for i from 0 below buffer-size
+                       for alignment = (stream-read-element stream)
+                       while alignment
+                       do (setf (svref buf i) alignment)
+                       finally (return
+                                 (if (= i buffer-size)
+                                     buf
+                                   (subseq buf 0 i))))))
     (cond ((plusp (length alignments))
            (let ((alignments (stable-sort alignments predicate :key key)))
              (loop
@@ -57,10 +62,10 @@
                                  :direction :io :element-type 'octet)
                 with alen-bytes = (make-array 4 :element-type 'octet
                                               :initial-element 0)
-                for alignment across alignments
-                do (progn
-                     (encode-int32le
-                      (length (the simple-octet-vector alignment)) alen-bytes)
+                for i from 0 below (length alignments)
+                do (let ((alignment (svref alignments i)))
+                     (declare (type simple-octet-vector alignment))
+                     (encode-int32le (length alignment) alen-bytes)
                      (write-sequence alen-bytes out)
                      (write-sequence alignment out))
                 finally (cond ((file-position out 0)
@@ -229,8 +234,7 @@ alignments that will be sorted in memory at any time, defaulting to
 (declaim (inline %read-bam-alignment))
 (defun %read-bam-alignment (stream)
   (declare (optimize (speed 3)))
-  (let ((alen-bytes (make-array 4 :element-type 'octet
-                                :initial-element 0)))
+  (let ((alen-bytes (make-array 4 :element-type 'octet :initial-element 0)))
     (if (zerop (read-sequence alen-bytes stream))
         nil
       (let ((record-length (decode-int32le alen-bytes)))
@@ -239,8 +243,6 @@ alignments that will be sorted in memory at any time, defaulting to
                    :text "BAM record reported a negative record length")
           (let ((record (make-array record-length :element-type 'octet
                                     :initial-element 0)))
-            (copy-array alen-bytes 0 3
-                        record 0)
             (read-sequence record stream)
             record))))))
 

@@ -161,6 +161,12 @@ Returns:
 (defun bgzf-open-p (bgzf)
   (open-stream-p (bgzf-stream bgzf)))
 
+(defun bgzf-virtual-position (position)
+  (ash position -16))
+
+(defun bgzf-virtual-offset (position)
+  (logand position #xffff))
+
 (defun bgzf-seek (bgzf position)
   "Seeks with the file encapsulated by a block gzip file.
 

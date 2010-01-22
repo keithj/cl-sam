@@ -26,7 +26,7 @@ data. Rebind this per thread to make {defun write-bgz-member}
 reentrant.")
 
 (declaim (ftype (function (bgzf simple-octet-vector vector-index
-                                &key (:compress t)) fixnum) write-bytes))
+                           &key (:compress t)) fixnum) write-bytes))
 (defun write-bytes (bgzf bytes n &key (compress t))
   (declare (optimize (speed 3) (safety 1)))
   (let ((stream (bgzf-stream bgzf)))
