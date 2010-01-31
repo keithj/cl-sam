@@ -189,9 +189,9 @@ Returns:
     (cond ((= current-position new-position) ; Seek within current bgz member
            (setf (bgzf-offset bgzf) new-offset))
           ((file-position stream new-position)
-           (setf (bgzf-buffer bgzf) (bgz-member-udata (read-bgz-member stream))
-                 (bgzf-offset bgzf) new-offset
-                 (bgzf-position bgzf) new-position))
+           (setf (bgzf-offset bgzf) new-offset
+                 (bgzf-position bgzf) new-position
+                 (bgzf-init bgzf) nil)) ; Ensures that the new member is read
           (t
            (error 'bgzf-io-error :text "failed to seek")))))
 
