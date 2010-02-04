@@ -851,20 +851,21 @@ starting at INDEX."
 (defun ensure-valid-reference-name (str)
   (declare (optimize (speed 3)))
   (declare (type simple-string str))
-  (flet ((invalid-char-p (char)
-           (find char *invalid-reference-name-chars* :test #'char=)))
-    (if (find-if #'invalid-char-p str)
-        (error 'malformed-field-error :field str :text "invalid reference name")
-      str)))
+  (loop
+     for c across str
+     do (when (find c *invalid-reference-name-chars* :test #'char=)
+          (error 'malformed-field-error :field str
+                 :text "invalid reference name"))
+     finally (return str)))
 
 (defun ensure-valid-read-name (str)
   (declare (optimize (speed 3)))
   (declare (type simple-string str))
-  (flet ((invalid-char-p (char)
-           (find char *invalid-read-name-chars* :test #'char=)))
-    (if (find-if #'invalid-char-p str)
-        (error 'malformed-field-error :field str :text "invalid read name")
-      str)))
+  (loop
+     for c across str
+     do (when (find c *invalid-read-name-chars* :test #'char=)
+          (error 'malformed-field-error :field str :text "invalid read name"))
+     finally (return str)))
 
 (defun ensure-valid-flag (flag &optional alignment-record)
   (cond ((mapped-proper-pair-p flag)
