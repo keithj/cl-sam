@@ -19,6 +19,7 @@
 
 (in-package :sam-test)
 
+;; FIXME -- add tests that seek into a different block
 (addtest (cl-sam-tests) bgzf-seek/tell/1
   (with-bgzf (bgzf (merge-pathnames "data/c1215.bam") :direction :input)
     (ensure (bgzf-open-p bgzf) :report "expected an open handle")

@@ -81,8 +81,10 @@ specification.
   offset (least significant 16 bits). This is a position within the
   uncompressed data of the member.
 
-- init: T if the struct has been initialized (used internally in
-  decompression and reading).
+- loaded-p: T if the bgz data has been loaded into the buffer (used
+  internally in decompression and reading).
+- load-seek: On loading the bgz data, proceed immediately to this
+  offset (used internally in decompression and reading).
 
 - eof: T if the decompression process has reached EOF (used internally
   in decompression and reading)."
@@ -94,7 +96,8 @@ specification.
   (position 0 :type (unsigned-byte 48))
   (offset 0 :type uint16)
   (pointer 0 :type uint16)
-  (init nil :type t)
+  (loaded-p nil :type t)
+  (load-seek 0 :type uint16)
   (eof nil :type t))
 
 (defmacro with-bgzf ((var filespec &key (direction :input)
@@ -162,7 +165,7 @@ Returns:
   (open-stream-p (bgzf-stream bgzf)))
 
 (defun bgzf-virtual-position (position)
-  (ash position -16))
+  (logand (ash position -16) #xffffffffffff))
 
 (defun bgzf-virtual-offset (position)
   (logand position #xffff))
@@ -183,15 +186,22 @@ Returns:
 
 - The new position."
   (let ((stream (bgzf-stream bgzf))
-        (new-position (ash position -16))
+        (new-position (logand (ash position -16) #xffffffffffff))
         (new-offset (logand position #xffff))
         (current-position (bgzf-position bgzf)))
-    (cond ((= current-position new-position) ; Seek within current bgz member
+    (cond ((and (bgzf-loaded-p bgzf)
+                (= current-position new-position))
+           ;; Pseudo-seek within the current initialised bgz member
            (setf (bgzf-offset bgzf) new-offset))
-          ((file-position stream new-position)
-           (setf (bgzf-offset bgzf) new-offset
-                 (bgzf-position bgzf) new-position
-                 (bgzf-init bgzf) nil)) ; Ensures that the new member is read
+          ((= current-position new-position)
+           ;; Pseudo-seek within the current uninitialised bgz member
+           (setf (bgzf-load-seek bgzf) new-offset))
+          ((file-position stream  new-position)
+           ;; Real seek ensuring that the new bgz member will be
+           ;; initialised
+           (setf (bgzf-position bgzf) new-position
+                 (bgzf-loaded-p bgzf) nil
+                 (bgzf-load-seek bgzf) new-offset)) 
           (t
            (error 'bgzf-io-error :text "failed to seek")))))
 

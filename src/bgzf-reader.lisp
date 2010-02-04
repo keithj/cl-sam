@@ -36,7 +36,7 @@ reentrant.")
 ;; I'm not going to do this yet.
 
 (defun read-bytes (bgzf n &key buffer)
-  (declare (optimize (speed 3) (safety 1)))
+  (declare (optimize (speed 3)))
   (let ((stream (bgzf-stream bgzf))
         (num-read 0))
     (declare (type vector-index n num-read))
@@ -47,24 +47,25 @@ reentrant.")
                                   :window-bits 15))
              (inflate-from-bgz ()
                (loop
+                  for pos = (file-position stream)
                   for bgz = (read-bgz-member stream)
                   until (or (null bgz)                      ; eof
                             (plusp (bgz-member-isize bgz))) ; skip if empty
                   finally (if bgz
                               (let ((udata (make-array (bgz-member-isize bgz)
                                                        :element-type 'octet
-                                                       :initial-element 0))
-                                    (pos (file-position stream)))
+                                                       :initial-element 0)))
                                 (check-type pos (unsigned-byte 48))
                                 (inflate-vec (bgz-member-cdata bgz) udata)
                                 (setf (bgzf-buffer bgzf) udata
-                                      (bgzf-position bgzf) (1+ pos)
-                                      (bgzf-offset bgzf) 0)
+                                      (bgzf-position bgzf) pos
+                                      (bgzf-offset bgzf) (bgzf-load-seek bgzf)
+                                      (bgzf-load-seek bgzf) 0)
                                 (return udata))
                             (setf (bgzf-eof bgzf) t)))))
-      (unless (bgzf-init bgzf)
+      (unless (bgzf-loaded-p bgzf)
         (inflate-from-bgz)
-        (setf (bgzf-init bgzf) t))
+        (setf (bgzf-loaded-p bgzf) t))
       (let ((inflated (or buffer (make-array n :element-type 'octet
                                              :initial-element 0))))
         (declare (type simple-octet-vector inflated))
@@ -127,7 +128,8 @@ Returns:
                (1 (decode-uint8le buffer))
                (2 (decode-uint16le buffer))
                (4 (decode-uint32le buffer))))))
-    (let ((id1 (decode-bytes stream 1)))
+    (let ((fpos (file-position stream))
+          (id1 (decode-bytes stream 1)))
       (when id1
         (let* ((id2 (decode-bytes stream 1))
                (cm (decode-bytes stream 1))
@@ -149,7 +151,11 @@ Returns:
                        (= +sf1+ sf1)
                        (= +sf2+ sf2)
                        (= +slen+ slen))
-            (error 'bgzf-io-error :text "invalid BGZ header"))
+            (let ((tmpl #.(txt "invalid BGZ header id1:~d id2:~d cm:~d flg:~d"
+                               "xlen:~d sf1:~d sf2:~d slen:~d at ~a in ~a")))
+              (error 'bgzf-io-error
+                     :text (format nil tmpl id1 id2 cm flg xlen sf1 sf2 slen
+                                   fpos stream))))
           (let* ((deflated-size (1+ (logand bsize #xffff)))
                  (cdata-len (- deflated-size +member-header-length+
                                +member-footer-length+))

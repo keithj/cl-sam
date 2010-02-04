@@ -44,9 +44,9 @@
                      for byte = (read-byte s2 nil nil)
                      while byte
                      collect byte)))
-        (ensure (or (null eof1) (equalp sam::*empty-bgzf-record* eof1))
+        (ensure (or (null eof1) (equalp sam::*empty-bgz-record* eof1))
                 :report "expected nil or ~a but found ~a"
-                :arguments (sam::*empty-bgzf-record* eof1))
-        (ensure (or (null eof2) (equalp sam::*empty-bgzf-record* eof2))
+                :arguments (sam::*empty-bgz-record* eof1))
+        (ensure (or (null eof2) (equalp sam::*empty-bgz-record* eof2))
                 :report "expected nil or ~a but found ~a"
-                :arguments (sam::*empty-bgzf-record* eof2))))))
+                :arguments (sam::*empty-bgz-record* eof2))))))
