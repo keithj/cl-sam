@@ -180,8 +180,8 @@
 ;; (addtest (cl-sam-tests) bam-byte-round-trip/1
 ;;   (let ((in-filespec (namestring (merge-pathnames "data/c1215.bam")))
 ;;         (out-filespec (namestring
-;;                        (make-tmp-pathname :tmpdir (merge-pathnames "data")
-;;                                           :basename "bam-roundtrip-"))))
+;;                        (tmp-pathname :tmpdir (merge-pathnames "data")
+;;                                      :basename "bam-roundtrip-"))))
 ;;     (with-bgzf (in in-filespec :direction :input)
 ;;       (with-bgzf (out out-filespec :direction :output)
 ;;         (multiple-value-bind (header num-refs ref-meta)

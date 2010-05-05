@@ -58,7 +58,7 @@
     (cond ((plusp (length alignments))
            (let ((alignments (stable-sort alignments predicate :key key)))
              (loop
-                with out = (open (make-tmp-pathname :basename "bam-merge-sort")
+                with out = (open (tmp-pathname :basename "bam-merge-sort")
                                  :direction :io :element-type 'octet)
                 with alen-bytes = (make-array 4 :element-type 'octet
                                               :initial-element 0)
