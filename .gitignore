@@ -1,0 +1,6 @@
+doc/html/
+test-results/
+*.fasl
+*.ufsl
+*.[oa]
+*~
