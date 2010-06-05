@@ -17,15 +17,9 @@
 
 (in-package :cl-user)
 
-(eval-when (:compile-toplevel :load-toplevel :execute)
-  (when (asdf:find-system :deoxybyte-systems nil)
-    (asdf:operate 'asdf:load-op :deoxybyte-systems)))
+(asdf:load-system :deoxybyte-systems)
 
-(defpackage :cl-sam-system
-  (:use :common-lisp :asdf)
-  (:import-from :deoxybyte-systems :lift-test-config :cldoc-config))
-
-(in-package :cl-sam-system)
+(in-package :uk.co.deoxybyte-systems)
 
 (defsystem cl-sam
     :name "cl-sam"
@@ -56,7 +50,7 @@
                            (:file "external-bam-sort")
                            (:file "cl-sam")))
      (:lift-test-config :lift-tests
-                        :pathname "cl-sam-test.config"
+                        :pathname "cl-sam-test"
                         :target-system :cl-sam)
      (:cldoc-config :cldoc-documentation
                     :pathname "doc/html/"
