@@ -19,17 +19,13 @@
 
 (in-package :sam)
 
-(define-condition bgzf-io-error (io-error)
-  ((text :initform nil
-         :initarg :text
-         :reader text-of
-         :documentation "Error message text.")
-   (errno :initform nil
+(define-condition bgzf-io-error (io-error simple-text-condition)
+  ((errno :initform nil
           :initarg :errno
           :reader errno-of
           :documentation "The C error number."))
   (:report (lambda (condition stream)
              (format stream "BGZF error~@[ ~d~]~@[: ~a~]"
-                     (errno-of condition) (text-of condition))))
+                     (errno-of condition) (message-of condition))))
   (:documentation "A condition raised when an error occurs reading
   from or writing to a BGZF file."))
