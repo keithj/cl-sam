@@ -20,12 +20,13 @@
 (in-package :sam)
 
 (defun view-sam (bam-filespec sam-filespec)
-  (with-bgzf (bgzf bam-filespec)
-    (with-open-file (out sam-filespec
-                         :direction :output :element-type 'base-char
-                         :external-format :ascii
-                         :if-exists :supersede)
-      (stream-view-sam bgzf out))))
+  (let ((*print-pretty* nil))
+    (with-bgzf (bgzf bam-filespec)
+      (with-open-file (out sam-filespec
+                           :direction :output :element-type 'base-char
+                           :external-format :ascii
+                           :if-exists :supersede)
+        (stream-view-sam bgzf out)))))
 
 (defun stream-view-sam (bgzf &optional (stream t))
   (unless (zerop (bgzf-tell bgzf))    ; Rewind unless already at start

@@ -25,7 +25,8 @@ is valid or raises a {define-condition malformed-file-error} if not."
   (let ((magic (read-bytes bgzf 4)))
     (unless (equalp *bam-magic* magic)
       (error 'malformed-file-error :file (bgzf-pathname bgzf)
-             :text "invalid BAM magic number"))
+             :format-control "invalid BAM magic number ~a"
+             :format-arguments (list magic)))
     t))
 
 (defun read-bam-header (bgzf)
@@ -82,4 +83,4 @@ raising a {define-condition malformed-file-error} otherwise."
   (if (bgzf-eof-p bgzf)
       t
     (error 'malformed-file-error :file (bgzf-pathname bgzf)
-           :text "BGZF EOF was missing")))
+           :format-control "BGZF EOF was missing")))

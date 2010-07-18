@@ -50,7 +50,7 @@ header HEADER-TYPE."
       (unless (and (< 3 (length str))
                    (char= #\: (char str 2)))
         (error 'malformed-field-error :field str
-               :text (format nil "missing colon in tag:value")))
+               :format-control "missing colon in tag:value"))
       (let ((tag (subseq str 0 2))
             (,var (subseq str 3)))
         (cond ,@(loop
@@ -61,8 +61,8 @@ header HEADER-TYPE."
                                           `,var))))
               (t
                (error 'malformed-field-error :field str
-                      :text (format nil "invalid ~a tag ~a"
-                                    ,header-type tag))))))))
+                      :format-control "invalid ~a tag ~a"
+                      :format-arguments (list ,header-type tag))))))))
 
 (define-header-tag-parser parse-hd-tag ("HD" value)
   (("VN" :vn)
@@ -74,7 +74,7 @@ header HEADER-TYPE."
                     :coordinate)
                    (t
                     (error 'malformed-field-error :field value
-                           :text "invalid SO value"))))
+                           :format-control "invalid SO value"))))
    ("GO" :go (cond ((string= "none" value)
                     :none)
                    ((string= "query" value)
@@ -83,7 +83,7 @@ header HEADER-TYPE."
                     :reference)
                    (t
                     (error 'malformed-field-error :field value
-                           :text "invalid GO value"))))))
+                           :format-control "invalid GO value"))))))
 
 (define-header-tag-parser parse-sq-tag ("SQ" value)
   (("SN" :sn) ("LN" :ln (parse-integer value))
@@ -117,9 +117,8 @@ and the rest of the list is itself an alist of record keys and values."
     (let ((record (cond ((or (< (length str) 4) ; 3 type chars, 1 tab char
                              (char/= #\@ (char str 0))
                              (char/= #\Tab (char str 3)))
-                         (error 'malformed-record-error
-                                :record str
-                                :text "invalid aSAM header record"))
+                         (error 'malformed-record-error :record str
+                                :format-control "invalid SAM header record"))
                         ((starts-with-string-p str "@HD")
                          (cons :hd (tags #'parse-hd-tag)))
                         ((starts-with-string-p str "@SQ")
@@ -129,9 +128,8 @@ and the rest of the list is itself an alist of record keys and values."
                         ((starts-with-string-p str "@PG")
                          (cons :pg (tags #'parse-pg-tag)))
                         (t
-                         (error 'malformed-record-error
-                                :record str
-                                :text "invalid SAM header record type")))))
+                         (error 'malformed-record-error :record str
+                                :format-control "invalid SAM header record type")))))
       ;; This is belt-and-braces because the parser already rejects
       ;; invalid tags
       (ensure-valid-header-tags (ensure-mandatory-header-tags record)))))
@@ -161,14 +159,13 @@ HEADER-TYPE and the returned tags are represented as symbols."
 a {define-condition malformed-record-error} ."
   (let* ((header-type (header-type record))
          (tags (header-tags record))
-         (mandatory (mandatory-header-tags header-type)))
-    (unless (and mandatory (subsetp mandatory (mapcar #'first tags)))
-      (error 'malformed-record-error
-             :record record
-             :text (let ((diff (set-difference mandatory
-                                               (mapcar #'first tags))))
-                     (format nil "~r missing mandatory tag~:p ~a"
-                             (length diff) diff))))
+         (mandatory (mandatory-header-tags header-type))
+         (tag-keys (mapcar #'first tags)))
+    (unless (and mandatory (subsetp mandatory tag-keys))
+      (let ((diff (set-difference mandatory tag-keys)))
+      (error 'malformed-record-error :record record
+             :format-control "~r missing mandatory tag~:p ~a"
+             :format-arguments (list (length diff) diff))))
     record))
 
 (defun ensure-valid-header-tags (record)
@@ -177,13 +174,13 @@ HEADER-RECORD or raises a {define-condition malformed-record-error} if
 invalid tags are present."
   (let* ((header-type (header-type record))
          (tags (header-tags record))
-         (valid (valid-header-tags header-type)))
-    (unless (subsetp (mapcar #'first tags) valid)
-      (error 'malformed-record-error
-             :record record
-             :text (let ((diff (set-difference (mapcar #'first tags) valid)))
-                     (format nil "~r invalid tag~:p ~a"
-                             (length diff) diff))))
+         (valid (valid-header-tags header-type))
+         (tag-keys (mapcar #'first tags)))
+    (unless (subsetp tag-keys valid)
+      (let ((diff (set-difference tag-keys valid)))
+        (error 'malformed-record-error :record record
+             :format-control "~r invalid tag~:p ~a"
+             :format-arguments (list (length diff) diff))))
     record))
 
 (defun merge-header-records (record1 record2)
@@ -193,9 +190,8 @@ they have the same header-type and do not contain any conflicting tag
 values."
   (unless (eql (header-type record1) (header-type record2))
     (error 'invalid-operation-error
-           :text (format nil
-                         "invalid merge caused by different record-types in ~a"
-                         (list record1 record2))))
+           :format-control "invalid merge caused by different record-types in ~a"
+           :format-arguments (list record1 record2)))
   (let* ((merged (cons (header-type record1)
                        (remove-duplicates (concatenate 'list
                                                        (header-tags record1)
@@ -204,9 +200,8 @@ values."
          (clashes (find-duplicate-header-tags merged)))
     (when clashes
       (error 'invalid-operation-error
-             :text (format nil
-                           "invalid merge caused by clashing tags ~a in ~a"
-                           clashes (list record1 record2))))
+             :format-control "invalid merge caused by clashing tags ~a in ~a"
+             :format-arguments (list clashes (list record1 record2))))
     merged))
 
 (defun make-sam-header (str)
@@ -241,9 +236,9 @@ of record keys and values."
                         (clashes (find-duplicate-header-tags tags))
                         (record (cons header-type tags)))
                    (when clashes
-                     (error 'malformed-record-error
-                            :record record
-                            :text (format nil "clashing tags ~a" clashes)))
+                     (error 'malformed-record-error :record record
+                            :format-control "clashing tags ~a"
+                            :format-arguments (list clashes)))
                    record)))))
 
 (defun hd-record (&key (version *sam-version*) (sort-order :unsorted)

@@ -34,11 +34,11 @@
   ())
 
 (defmethod stream-read-element ((stream bam-sort-input-stream))
-  (read-alignment (bgzf-of stream)))
+  (read-alignment (slot-value stream 'bgzf)))
 
 (defmethod stream-write-element ((alignment-record vector)
                                  (stream bam-sort-output-stream))
-  (write-alignment (bgzf-of stream) alignment-record))
+  (write-alignment (slot-value stream 'bgzf) alignment-record))
 
 (defmethod make-merge-stream ((stream bam-sort-input-stream) predicate
                               &key key (buffer-size 100000))
@@ -51,10 +51,9 @@
                        for alignment = (stream-read-element stream)
                        while alignment
                        do (setf (svref buf i) alignment)
-                       finally (return
-                                 (if (= i buffer-size)
-                                     buf
-                                   (subseq buf 0 i))))))
+                       finally (return (if (= i buffer-size)
+                                           buf
+                                         (subseq buf 0 i))))))
     (cond ((plusp (length alignments))
            (let ((alignments (stable-sort alignments predicate :key key)))
              (loop
@@ -119,9 +118,11 @@ identical to a coordinate sort performed by Picard 1.07."
              (or (< pos1 pos2)
                  (and (= pos1 pos2)
                       (let ((q1 (query-forward-p
-                                 (alignment-flag alignment-record1)))
+                                 (alignment-flag alignment-record1
+                                                 :validate nil)))
                             (q2 (query-forward-p
-                                 (alignment-flag alignment-record2))))
+                                 (alignment-flag alignment-record2
+                                                 :validate nil))))
                         (if (eq q1 q2)
                             (let ((name1 (read-name alignment-record1))
                                   (name2 (read-name alignment-record2)))
@@ -240,7 +241,8 @@ alignments that will be sorted in memory at any time, defaulting to
       (let ((record-length (decode-int32le alen-bytes)))
         (if (minusp record-length)
             (error 'malformed-record-error
-                   :text "BAM record reported a negative record length")
+                   :format-control "BAM record reported a record length of ~a"
+                   :format-arguments (list record-length))
           (let ((record (make-array record-length :element-type 'octet
                                     :initial-element 0)))
             (read-sequence record stream)

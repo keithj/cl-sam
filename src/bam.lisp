@@ -308,7 +308,7 @@ Returns:
           (:pcr/optical-duplicate '(10 1)))
         (setf (ldb (byte 1 bit) f) value)))))
 
-;; (declaim (ftype (function (simple-octet-vector) (unsigned-byte 32))
+;; (declaim (ftype (function (simple-octet-vector) (signed-byte 32))
 ;;                 reference-id))
 (declaim (inline reference-id))
 (defun reference-id (alignment-record)
@@ -318,7 +318,7 @@ context of a BAM file."
   (declare (optimize (speed 3)))
   (decode-int32le alignment-record 0))
 
-;; (declaim (ftype (function (simple-octet-vector) (unsigned-byte 32))
+;; (declaim (ftype (function (simple-octet-vector) (signed-byte 32))
 ;;                 alignment-position))
 (declaim (inline alignment-position))
 (defun alignment-position (alignment-record)
@@ -358,15 +358,18 @@ ALIGNMENT-RECORD has been assigned."
   "Returns the number of CIGAR operations in ALIGNMENT-RECORD."
   (decode-uint16le alignment-record 12))
 
+;; (declaim (ftype (function ((simple-octet-vector) &key (:validate t))
+;;                           (unsigned-byte 16))
+;;                 alignment-flag))
 (declaim (inline alignment-flag))
 (defun alignment-flag (alignment-record &key (validate t))
   "Returns an integer whose bits are flags that describe properties of
 the ALIGNMENT-RECORD. If the VALIDATE key is T (the default) the
 flag's bits are checked for internal consistency."
   (let ((flag (decode-uint16le alignment-record 14)))
-    (if validate
-        (ensure-valid-flag flag alignment-record)
-      flag)))
+    (when validate
+      (ensure-valid-flag flag alignment-record))
+    flag))
 
 (defun sequenced-pair-p (flag)
   "Returns T if FLAG indicates that the read was sequenced as a member
@@ -855,7 +858,8 @@ starting at INDEX."
      for c across str
      do (when (find c *invalid-reference-name-chars* :test #'char=)
           (error 'malformed-field-error :field str
-                 :text "invalid reference name"))
+                 :format-control "invalid character ~c in reference name"
+                 :format-arguments (list c)))
      finally (return str)))
 
 (defun ensure-valid-read-name (str)
@@ -864,7 +868,9 @@ starting at INDEX."
   (loop
      for c across str
      do (when (find c *invalid-read-name-chars* :test #'char=)
-          (error 'malformed-field-error :field str :text "invalid read name"))
+          (error 'malformed-field-error :field str
+                 :format-control "invalid character ~c in read name"
+                 :format-arguments (list c)))
      finally (return str)))
 
 (defun ensure-valid-flag (flag &optional alignment-record)
@@ -920,11 +926,11 @@ FLAG in ALIGNMENT-RECORD, with MESSAGE."
       (let ((reference-id (reference-id alignment-record))
             (read-name (read-name alignment-record))
             (pos (alignment-position alignment-record)))
-        (error 'malformed-field-error
-               :field flag
-               :text (format nil (txt "invalid flag ~b set for read ~s at ~a"
-                                      "in reference ~d: ~a")
-                             flag read-name pos reference-id message)))
+        (error 'malformed-field-error :field flag
+               :format-control (txt "invalid flag ~b set for read ~s at ~a"
+                                    "in reference ~d: ~a")
+               :format-arguments (list flag read-name pos reference-id) message))
     (error 'malformed-field-error
            :field flag
-           :text (format nil "invalid flag ~b set: ~a" flag message))))
+           :format-control "invalid flag ~b set: ~a"
+           :format-arguments (list flag message))))
