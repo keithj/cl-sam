@@ -34,8 +34,9 @@ header."
     ;; store header length, including padding
     (encode-int32le (+ hlen null-padding) buffer)
     (when (plusp hlen)
-      (copy-array header 0 (1- hlen)
-                  buffer 4 #'char-code))
+      (let ((hcodes (make-array hlen :element-type 'octet)))
+        (map-into hcodes #'char-code header)
+        (replace buffer hcodes :start1 4)))
     (write-bytes bgzf buffer (length buffer) :compress compress)))
 
 (defun write-num-references (bgzf n)
@@ -47,15 +48,17 @@ header."
 (defun write-reference-meta (bgzf ref-name ref-length)
   "Writes the metadata for a single reference sequence named REF-NAME,
 of length REF-LENGTH bases, to handle BGZF."
-  (let* ((name-len (1+ (length ref-name)))
-         (buffer-len (+ 4 name-len 4))
+  (let* ((name-len (length ref-name))
+         (bam-name-len (1+ name-len))
+         (name-codes (make-array name-len :element-type 'octet))
+         (buffer-len (+ 4 bam-name-len 4))
          (name-offset 4)
-         (ref-len-offset (+ name-offset name-len))
+         (ref-len-offset (+ name-offset bam-name-len))
          (buffer (make-array buffer-len :element-type 'octet
                              :initial-element +null-byte+)))
-    (encode-int32le name-len buffer)
-    (copy-array ref-name 0 (- name-len 2)
-                buffer name-offset #'char-code)
+    (encode-int32le bam-name-len buffer)
+    (map-into name-codes #'char-code ref-name)
+    (replace buffer name-codes :start1 name-offset)
     (encode-int32le ref-length buffer ref-len-offset)
     (write-bytes bgzf buffer buffer-len)))
 
