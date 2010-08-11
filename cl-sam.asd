@@ -41,7 +41,7 @@
                            (:file "bgzf")
                            (:file "bgzf-reader")
                            (:file "bgzf-writer")
-                           (:file "bgzf-stream")
+                           (:file "bgzip-stream")
                            (:file "bam")
                            (:file "sam")
                            (:file "bam-reader")
