@@ -34,6 +34,7 @@
   (multiple-value-bind (header num-refs ref-meta)
       (read-bam-meta bgzf)
     (declare (ignore num-refs))
+    (declare (optimize (speed 3) (safety 0)))
     (write-sam-header (ensure-order
                        (ensure-sam-version
                         (make-sam-header header)) :sort) stream)

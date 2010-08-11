@@ -19,108 +19,127 @@
 
 (in-package :sam)
 
-(defconstant +bgzf-buffer-size+ 8192
-  "Buffer size for {defclass bgzf-input-stream} internal buffer.")
+(defconstant +bgzip-buffer-size+ 8192
+  "Buffer size for {defclass bgzip-input-stream} internal buffer.")
 
-(deftype bgzf-buffer ()
-  "Buffer type for {defclass bgzf-input-stream} internal buffer."
-  `(simple-array (unsigned-byte 8) (,+bgzf-buffer-size+)))
+(deftype bgzip-buffer ()
+  "Buffer type for {defclass bgzip-input-stream} internal buffer."
+  `(simple-array (unsigned-byte 8) (,+bgzip-buffer-size+)))
 
-(deftype bgzf-buffer-index ()
+(deftype bgzip-buffer-index ()
   "Index type for {defclass bgzf-input-stream} internal buffer."
-  `(integer 0 ,+bgzf-buffer-size+))
+  `(integer 0 ,+bgzip-buffer-size+))
 
-(defclass bgzf-stream (fundamental-binary-stream)
-  ((bgzf :initarg :bgzf
-         :reader bgzf-of
-         :documentation "The BGZF file handle."))
+(defclass bgzf-handle-mixin ()
+  ((bgzf :initform nil
+         :initarg :bgzf
+         :documentation "The BGZF file handle.")))
+
+(defclass bgzip-stream (fundamental-binary-stream bgzf-handle-mixin)
+  ()
   (:documentation "A BGZF stream capable of reading or writing block
 compressed data."))
 
-(defclass bgzf-input-stream (bgzf-stream fundamental-binary-input-stream)
+(defclass bgzip-input-stream (bgzip-stream fundamental-binary-input-stream)
   ((buffer :initarg :buffer
            :initform nil
-           :reader buffer-of
            :documentation "The Lisp buffer from which data are read.")
    (num-bytes :initform 0
-              :accessor num-bytes-of
               :documentation "The number of bytes that were read into
 the buffer from the stream.")
    (offset :initform 0
-           :accessor offset-of
            :documentation "The offset in the byte buffer from which
 the next byte is to be read."))
   (:documentation "A stream that reads from a BGZF file."))
 
-(defun bgzf-stream-open (filespec &key (direction :input))
+(defmacro with-open-bgzip ((var filespec &rest args) &body body)
+  `(let ((,var (apply #'bgzip-open ,filespec ,args)))
+     (unwind-protect
+          (progn
+            ,@body)
+       (when ,var
+         (close ,var)))))
+
+(defun bgzip-open (filespec &key (direction :input))
+  "Opens a block gzip stream for FILESPEC.
+
+Key:
+
+- direction (symbol): One of :input (the default) or :output
+
+Returns:
+
+- A {defclass bgzip-stream}"
   (ecase direction
     (:input
-     (make-instance 'bgzf-input-stream
+     (make-instance 'bgzip-input-stream
                     :bgzf (bgzf-open filespec :direction direction)
-                    :buffer (make-array +bgzf-buffer-size+ :element-type 'octet
+                    :buffer (make-array +bgzip-buffer-size+ :element-type 'octet
                                         :initial-element 0)))
     (:output (error "BGZF output streams are not implemented yet."))))
 
-(defmethod stream-element-type ((stream bgzf-stream))
+(defmethod stream-element-type ((stream bgzip-stream))
   'octet)
 
-(defmethod close ((stream bgzf-stream) &key abort)
+(defmethod close ((stream bgzip-stream) &key abort)
   (declare (ignore abort))
   (when (open-stream-p stream)
-    (unwind-protect 
-         (if (bgzf-close (bgzf-of stream))
+    (unwind-protect
+         (if (bgzf-close (slot-value stream 'bgzf))
              t
            (error 'bgzf-io-error :text "failed to close file cleanly"))
       (call-next-method))))
 
-(defmethod stream-file-position ((stream bgzf-input-stream) &optional position)
-  (cond (position
-         (unless (bgzf-seek (bgzf-of stream) position)
-           (error 'bgzf-io-error :text "failed to seek in file"))
-         (setf (offset-of stream) 0
-               (num-bytes-of stream) 0)
-         t)
-        (t
-         (let ((position (bgzf-tell (bgzf-of stream))))
-           (- position (num-bytes-buffered stream))))))
+(defmethod stream-file-position ((stream bgzip-input-stream) &optional position)
+  (with-slots (bgzf offset num-bytes)
+      stream
+    (flet ((num-bytes-buffered ()
+             (- num-bytes offset)))
+      (cond (position
+             (unless (bgzf-seek bgzf position)
+               (error 'bgzf-io-error :text "failed to seek in file"))
+             (setf offset 0
+                   num-bytes 0)
+             t)
+            (t
+             (let ((position (bgzf-tell bgzf)))
+               (- position (num-bytes-buffered))))))))
 
-(defmethod stream-read-byte ((stream bgzf-input-stream))
+(defmethod stream-read-byte ((stream bgzip-input-stream))
   (if (and (buffer-empty-p stream) (zerop (fill-buffer stream)))
       :eof
-    (with-accessors ((buffer buffer-of) (offset offset-of))
+    (with-slots (buffer offset)
         stream
       (prog1
           (aref buffer offset)
         (incf offset)))))
 
 #+(or :sbcl :ccl)
-(defmethod stream-read-sequence ((stream bgzf-input-stream) sequence
+(defmethod stream-read-sequence ((stream bgzip-input-stream) sequence
                                  &optional (start 0) end)
   (%stream-read-sequence stream sequence start end))
 
 #+lispworks
-(defmethod stream-read-sequence ((stream bgzf-input-stream) sequence
+(defmethod stream-read-sequence ((stream bgzip-input-stream) sequence
                                  start end)
   (%stream-read-sequence stream sequence start end))
 
 (defun buffer-empty-p (stream)
   (declare (optimize (speed 3) (safety 1)))
-  (= (the fixnum (offset-of stream)) (the fixnum (num-bytes-of stream))))
-
-(defun num-bytes-buffered (stream)
-  (- (num-bytes-of stream) (offset-of stream)))
+  (with-slots (offset num-bytes)
+      stream
+    (= (the fixnum offset) (the fixnum num-bytes))))
 
 (defun fill-buffer (stream)
-  (with-accessors ((bgzf bgzf-of) (buffer buffer-of) (offset offset-of)
-                   (num-bytes num-bytes-of))
+  (with-slots (bgzf buffer offset num-bytes)
       stream
     (declare (optimize (speed 3) (safety 1)))
-    (declare (type bgzf-buffer buffer))
+    (declare (type bgzip-buffer buffer))
     (let ((n (length buffer)))
       (multiple-value-bind (buffer num-read)
           (read-bytes bgzf n :buffer buffer)
         (declare (ignore buffer))
-        (declare (type bgzf-buffer-index num-read))
+        (declare (type bgzip-buffer-index num-read))
         (setf offset 0
               num-bytes num-read)))))
 
@@ -151,11 +170,10 @@ the next byte is to be read."))
                          finally (return seq-index))))))
     (if (and (buffer-empty-p stream) (zerop (the fixnum (fill-buffer stream))))
         0
-      (with-accessors ((buffer buffer-of) (offset offset-of)
-                       (num-bytes num-bytes-of))
+      (with-slots (buffer offset num-bytes)
           stream
-        (declare (type bgzf-buffer buffer)
-                 (type bgzf-buffer-index offset num-bytes)
+        (declare (type bgzip-buffer buffer)
+                 (type bgzip-buffer-index offset num-bytes)
                  (type fixnum start))
         (typecase sequence
           (simple-octet-vector

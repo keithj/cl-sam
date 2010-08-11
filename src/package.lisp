@@ -50,11 +50,13 @@
    #:bgzf-tell
    #:bgzf-eof-p
    #:with-bgzf
-   
-   ;; BGZF stream API
-   #:bgzf-stream
-   #:bgzf-input-stream
-   #:bgzf-stream-open
+
+   ;; Gray streams API
+   #:bgzip-stream
+   #:bgzip-input-stream
+   #:bgzip-output-stream
+   #:bgzip-open
+   #:with-open-bgzip
    
    ;; Low-level BAM reading API
    #:read-bam-magic

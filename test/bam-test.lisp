@@ -50,8 +50,8 @@
 (addtest (cl-sam-tests) bgzf-stream-read-byte/1
   (with-open-file (raw (merge-pathnames "data/c1215.dat")
                        :element-type 'octet)
-    (let ((stream (bgzf-stream-open (merge-pathnames "data/c1215.bam")
-                                    :direction :input)))
+    (let ((stream (bgzip-open (merge-pathnames "data/c1215.bam")
+                              :direction :input)))
       (ensure (loop
                  for byte = (stream-read-byte stream)
                  until (eql :eof byte)
@@ -63,8 +63,8 @@
 (addtest (cl-sam-tests) bgzf-stream-read-sequence/1
   (with-open-file (raw (merge-pathnames "data/c1215.dat")
                        :element-type 'octet)
-    (let ((stream (bgzf-stream-open (merge-pathnames "data/c1215.bam")
-                                    :direction :input))
+    (let ((stream (bgzip-open (merge-pathnames "data/c1215.bam")
+                              :direction :input))
           (buffer1 (make-array 100 :element-type 'octet :initial-element 0))
           (buffer2 (make-array 100 :element-type 'octet :initial-element 0)))
       (ensure (loop

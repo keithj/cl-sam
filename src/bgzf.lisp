@@ -144,7 +144,7 @@ Returns:
                       :if-exists if-exists)))
     (if compression
         (make-bgzf :stream stream :pathname filespec :compression compression)
-      (make-bgzf :stream stream :pathname filespec))))
+        (make-bgzf :stream stream :pathname filespec))))
 
 (defun bgzf-close (bgzf)
   "Closes an open block gzip file.

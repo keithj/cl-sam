@@ -19,11 +19,6 @@
 
 (in-package :sam)
 
-(defclass bgzf-handle-mixin ()
-  ((bgzf :initform nil
-         :initarg :bgzf
-         :accessor bgzf-of)))
-
 (defclass bam-sort-input-stream (sort-input-stream bgzf-handle-mixin)
   ())
 
@@ -239,14 +234,12 @@ alignments that will be sorted in memory at any time, defaulting to
     (if (zerop (read-sequence alen-bytes stream))
         nil
       (let ((record-length (decode-int32le alen-bytes)))
-        (if (minusp record-length)
-            (error 'malformed-record-error
-                   :format-control "BAM record reported a record length of ~a"
-                   :format-arguments (list record-length))
-          (let ((record (make-array record-length :element-type 'octet
-                                    :initial-element 0)))
-            (read-sequence record stream)
-            record))))))
+        (check-record (not (minusp record-length)) ()
+                      "BAM record reported a record length of ~a" record-length)
+        (let ((record (make-array record-length :element-type 'octet
+                                  :initial-element 0)))
+          (read-sequence record stream)
+          record)))))
 
 (let ((buffer (make-array 100 :element-type 'base-char :initial-element #\Nul)))
   (defun parse-digits (bytes start end)
