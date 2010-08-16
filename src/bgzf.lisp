@@ -134,14 +134,14 @@ Arguments:
 Key:
 
 - direction (keyword): The direction, one of either :read or :write .
-- if-exists (keyword): Behaviour with respoect to existing
+- if-exists (keyword): Behaviour with respect to existing
   files. Defaults to :overwrite .
 
 Returns:
 
 - A BGZF structure."
   (let ((stream (open filespec :element-type 'octet :direction direction
-                      :if-exists if-exists)))
+                      :if-exists if-exists :if-does-not-exist :create)))
     (if compression
         (make-bgzf :stream stream :pathname filespec :compression compression)
         (make-bgzf :stream stream :pathname filespec))))
