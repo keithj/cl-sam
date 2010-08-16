@@ -59,8 +59,8 @@ alignment. If no more alignments are available, returns NIL."
   (let ((size-bytes (read-bytes bgzf 4)))
     (if (null size-bytes)
         nil
-      (let ((block-size (decode-int32le size-bytes)))
-        (read-bytes bgzf block-size)))))
+        (let ((block-size (decode-int32le size-bytes)))
+          (read-bytes bgzf block-size)))))
 
 (defun read-bam-meta (bgzf)
   "Reads all BAM metadata from handle BGZF, leaving the handle
@@ -82,5 +82,5 @@ list of reference identifier, reference name and reference length."
 raising a {define-condition malformed-file-error} otherwise."
   (if (bgzf-eof-p bgzf)
       t
-    (error 'malformed-file-error :file (bgzf-pathname bgzf)
-           :format-control "BGZF EOF was missing")))
+      (error 'malformed-file-error :file (bgzf-pathname bgzf)
+             :format-control "BGZF EOF was missing")))

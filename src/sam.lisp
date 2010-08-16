@@ -114,22 +114,23 @@ thus the list's first element is a keyword describing the record type
 and the rest of the list is itself an alist of record keys and values."
   (flet ((tags (fn)
            (mapcar fn (rest (string-split str #\Tab)))))
-    (let ((record (cond ((or (< (length str) 4) ; 3 type chars, 1 tab char
-                             (char/= #\@ (char str 0))
-                             (char/= #\Tab (char str 3)))
-                         (error 'malformed-record-error :record str
-                                :format-control "invalid SAM header record"))
-                        ((starts-with-string-p str "@HD")
-                         (cons :hd (tags #'parse-hd-tag)))
-                        ((starts-with-string-p str "@SQ")
-                         (cons :sq (tags #'parse-sq-tag)))
-                        ((starts-with-string-p str "@RG")
-                         (cons :rg (tags #'parse-rg-tag)))
-                        ((starts-with-string-p str "@PG")
-                         (cons :pg (tags #'parse-pg-tag)))
-                        (t
-                         (error 'malformed-record-error :record str
-                                :format-control "invalid SAM header record type")))))
+    (let ((record
+           (cond ((or (< (length str) 4) ; 3 type chars, 1 tab char
+                      (char/= #\@ (char str 0))
+                      (char/= #\Tab (char str 3)))
+                  (error 'malformed-record-error :record str
+                         :format-control "invalid SAM header record"))
+                 ((starts-with-string-p str "@HD")
+                  (cons :hd (tags #'parse-hd-tag)))
+                 ((starts-with-string-p str "@SQ")
+                  (cons :sq (tags #'parse-sq-tag)))
+                 ((starts-with-string-p str "@RG")
+                  (cons :rg (tags #'parse-rg-tag)))
+                 ((starts-with-string-p str "@PG")
+                  (cons :pg (tags #'parse-pg-tag)))
+                 (t
+                  (error 'malformed-record-error :record str
+                         :format-control "invalid SAM header record type")))))
       ;; This is belt-and-braces because the parser already rejects
       ;; invalid tags
       (ensure-valid-header-tags (ensure-mandatory-header-tags record)))))
@@ -179,8 +180,8 @@ invalid tags are present."
     (unless (subsetp tag-keys valid)
       (let ((diff (set-difference tag-keys valid)))
         (error 'malformed-record-error :record record
-             :format-control "~r invalid tag~:p ~a"
-             :format-arguments (list (length diff) diff))))
+               :format-control "~r invalid tag~:p ~a"
+               :format-arguments (list (length diff) diff))))
     record))
 
 (defun merge-header-records (record1 record2)
@@ -190,7 +191,8 @@ they have the same header-type and do not contain any conflicting tag
 values."
   (unless (eql (header-type record1) (header-type record2))
     (error 'invalid-operation-error
-           :format-control "invalid merge caused by different record-types in ~a"
+           :format-control (txt "invalid merge caused by different"
+                                "record-types in ~a")
            :format-arguments (list record1 record2)))
   (let* ((merged (cons (header-type record1)
                        (remove-duplicates (concatenate 'list
@@ -248,8 +250,8 @@ of record keys and values."
   (cons :hd (reverse (pairlis (valid-header-tags :hd)
                               (list version sort-order group-order)))))
 
-(defun sq-record (seq-name seq-length &key assembly-identity
-                  seq-md5 seq-uri seq-species)
+(defun sq-record (seq-name seq-length &key assembly-identity seq-md5 seq-uri
+                  seq-species)
   (assert (stringp seq-name)
           (seq-name)
           "SEQ-NAME should be a string, but was ~a" seq-name)
@@ -335,7 +337,7 @@ orders."
   tag."
   (if (assoc :hd header)              ; Version is mandatory in header
       header
-    (cons (list :hd (cons :vn version)) header)))
+      (cons (list :hd (cons :vn version)) header)))
 
 ;;; SAM spec is silent on whether order within a record is
 ;;; important. For now we use acons and change the order because the
@@ -406,7 +408,7 @@ value."
              (group (gethash id groups)))
         (setf (gethash id groups) (if group
                                       (cons record group)
-                                    (list record)))))))
+                                      (list record)))))))
 
 (defun find-duplicate-header-tags (record)
   "Returns a list of duplicate SAM header tags found in RECORD. Each
@@ -421,7 +423,7 @@ values."
        for prev = (gethash tag duplicates)
        do (setf (gethash tag duplicates) (if prev
                                              (cons val prev)
-                                           (list val)))
+                                             (list val)))
        finally (return (loop
                           for tag being the hash-keys of duplicates
                           using (hash-value vals)

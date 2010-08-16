@@ -48,7 +48,7 @@
                        do (setf (svref buf i) alignment)
                        finally (return (if (= i buffer-size)
                                            buf
-                                         (subseq buf 0 i))))))
+                                           (subseq buf 0 i))))))
     (cond ((plusp (length alignments))
            (let ((alignments (stable-sort alignments predicate :key key)))
              (loop
@@ -123,7 +123,7 @@ identical to a coordinate sort performed by Picard 1.07."
                                   (name2 (read-name alignment-record2)))
                               (declare (type simple-base-string name1 name2))
                               (string< name1 name2))
-                          (and q1 (not q2))))))))
+                            (and q1 (not q2))))))))
           (t
            (< ref1 ref2)))))
 
@@ -233,9 +233,10 @@ alignments that will be sorted in memory at any time, defaulting to
   (let ((alen-bytes (make-array 4 :element-type 'octet :initial-element 0)))
     (if (zerop (read-sequence alen-bytes stream))
         nil
-      (let ((record-length (decode-int32le alen-bytes)))
-        (check-record (not (minusp record-length)) ()
-                      "BAM record reported a record length of ~a" record-length)
+        (let ((record-length (decode-int32le alen-bytes)))
+          (check-record (not (minusp record-length)) ()
+                        "BAM record reported a record length of ~a"
+                        record-length)
         (let ((record (make-array record-length :element-type 'octet
                                   :initial-element 0)))
           (read-sequence record stream)

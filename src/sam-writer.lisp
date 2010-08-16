@@ -64,8 +64,8 @@ hash-table created by {defun make-reference-table} ."
       (write-char #\Tab stream)
       (if (zerop position)
           (write-char #\* stream)
-        (write-string
-         (gethash (reference-id alignment-record) ref-table) stream))
+          (write-string
+           (gethash (reference-id alignment-record) ref-table) stream))
       (write-char #\Tab stream)
       (princ position stream)
       (write-char #\Tab stream)
@@ -98,8 +98,7 @@ hash-table created by {defun make-reference-table} ."
       (terpri stream))))
 
 (declaim (inline write-cigar))
-(defun write-cigar (alignment-record index num-bytes
-                    &optional (stream t))
+(defun write-cigar (alignment-record index num-bytes &optional (stream t))
   "Writes the CIGAR string of ALIGNMENT-RECORD at INDEX as NUM-BYTES
 bytes, to STREAM."
   (declare (optimize (speed 3)))
@@ -122,8 +121,7 @@ bytes, to STREAM."
             (write-char (decode-op x) stream)))))
 
 (declaim (inline write-seq-string))
-(defun write-seq-string (alignment-record index num-bytes
-                         &optional (stream t))
+(defun write-seq-string (alignment-record index num-bytes &optional (stream t))
   "Writes the sequence string of ALIGNMENT-RECORD at INDEX as
 NUM-BYTES bytes, to STREAM."
   (declare (optimize (speed 3)))
@@ -143,7 +141,7 @@ NUM-BYTES bytes, to STREAM."
        do (write-char (decode-base
                        (if (evenp i)
                            (ldb (byte 4 4) (aref alignment-record j))
-                         (ldb (byte 4 0) (aref alignment-record j))))
+                           (ldb (byte 4 0) (aref alignment-record j))))
                       stream))))
 
 (declaim (inline write-quality-string))
@@ -158,14 +156,13 @@ NUM-BYTES, to STREAM."
            (code-char (+ 33 (min 93 x)))))
     (if (= #xff (aref alignment-record index))
         (write-char #\* stream)
-      (loop
-         for i from index below (+ index num-bytes)
-         do (write-char (encode-phred (decode-uint8le alignment-record i))
-                        stream)))))
+        (loop
+           for i from index below (+ index num-bytes)
+           do (write-char (encode-phred (decode-uint8le alignment-record i))
+                          stream)))))
 
 (declaim (inline write-tag-values))
-(defun write-tag-values (alignment-record index
-                         &optional (stream t))
+(defun write-tag-values (alignment-record index &optional (stream t))
   "Writes the auxilliary data of ALIGNMENT-RECORD at INDEX to STREAM."
   (declare (optimize (speed 3) (safety 0)))
   (declare (type simple-octet-vector alignment-record)

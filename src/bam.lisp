@@ -216,20 +216,20 @@ The tags must have been defined with {defmacro define-alignment-tag} .
 Returns:
 
 - A vector of '(unsigned-byte 8)."
-  (when (and quality-str (/= (length seq-str) (length quality-str)))
-    (error 'invalid-argument-error
-           :params '(seq-str quality-str)
-           :args (list seq-str quality-str)
-           :text "read sequence and quality strings were not the same length"))
+  (check-arguments (if quality-str
+                       (= (length seq-str) (length quality-str))
+                       t)
+                   (seq-str quality-str)
+                   "read sequence and quality strings were not the same length")
   (let* ((i 32)
          (j (+ i (1+ (length read-name))))
          (k (+ j (if (null cigar)
                      4
-                   (* 4 (length cigar)))))
+                     (* 4 (length cigar)))))
          (m (+ k (ceiling (length seq-str) 2)))
          (n (+ m (if (null quality-str)
                      1
-                   (length quality-str))))
+                     (length quality-str))))
          (sizes (loop
                    for (nil . value) in tag-values
                    collect (alignment-tag-bytes value)))
@@ -644,7 +644,7 @@ NUM-BYTES. The sequence must be present in ALIGNMENT-RECORD at INDEX."
        do (setf (char seq i)
                 (decode-base (if (evenp i)
                                  (ldb (byte 4 4) (aref alignment-record j))
-                               (ldb (byte 4 0) (aref alignment-record j)))))
+                                 (ldb (byte 4 0) (aref alignment-record j)))))
        finally (return seq))))
 
 (defun encode-seq-string (str alignment-record index)
@@ -664,7 +664,7 @@ INDEX."
        for nibble = (encode-base (char str i))
        do (if (evenp i)
               (setf (ldb (byte 4 4) (aref alignment-record j)) nibble)
-            (setf (ldb (byte 4 0) (aref alignment-record j)) nibble))
+              (setf (ldb (byte 4 0) (aref alignment-record j)) nibble))
        finally (return alignment-record))))
 
 (defun decode-quality-string (alignment-record index num-bytes)
@@ -696,8 +696,7 @@ at INDEX."
       (loop
          for i from 0 below (length str)
          for j = (+ index i)
-         do (encode-int8le (decode-phred (char str i))
-                           alignment-record j))))
+         do (encode-int8le (decode-phred (char str i)) alignment-record j))))
   alignment-record)
 
 (defun decode-cigar (alignment-record index num-bytes)
@@ -856,10 +855,8 @@ starting at INDEX."
   (declare (type simple-string str))
   (loop
      for c across str
-     do (when (find c *invalid-reference-name-chars* :test #'char=)
-          (error 'malformed-field-error :field str
-                 :format-control "invalid character ~c in reference name"
-                 :format-arguments (list c)))
+     do (check-field (not (find c *invalid-reference-name-chars* :test #'char=))
+                     nil str "invalid character ~c in reference name" c)
      finally (return str)))
 
 (defun ensure-valid-read-name (str)
@@ -867,10 +864,8 @@ starting at INDEX."
   (declare (type simple-string str))
   (loop
      for c across str
-     do (when (find c *invalid-read-name-chars* :test #'char=)
-          (error 'malformed-field-error :field str
-                 :format-control "invalid character ~c in read name"
-                 :format-arguments (list c)))
+     do (check-field (not (find c *invalid-read-name-chars* :test #'char=))
+                     nil str "invalid character ~c in read name" c)
      finally (return str)))
 
 (defun ensure-valid-flag (flag &optional alignment-record)
@@ -896,9 +891,9 @@ starting at INDEX."
         ((sequenced-pair-p flag)
          (if (valid-pair-num-p flag)
              flag
-           (flag-validation-error
-            flag "first-in-pair and second-in-pair bits were both set"
-            alignment-record)))
+             (flag-validation-error
+              flag "first-in-pair and second-in-pair bits were both set"
+              alignment-record)))
         (t
          (cond ((mate-reverse-p flag)
                 (flag-validation-error
@@ -929,8 +924,9 @@ FLAG in ALIGNMENT-RECORD, with MESSAGE."
         (error 'malformed-field-error :field flag
                :format-control (txt "invalid flag ~b set for read ~s at ~a"
                                     "in reference ~d: ~a")
-               :format-arguments (list flag read-name pos reference-id) message))
-    (error 'malformed-field-error
-           :field flag
-           :format-control "invalid flag ~b set: ~a"
-           :format-arguments (list flag message))))
+               :format-arguments (list flag read-name pos reference-id
+                                       message)))
+      (error 'malformed-field-error
+             :field flag
+             :format-control "invalid flag ~b set: ~a"
+             :format-arguments (list flag message))))

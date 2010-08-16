@@ -62,7 +62,7 @@ reentrant.")
                                       (bgzf-offset bgzf) (bgzf-load-seek bgzf)
                                       (bgzf-load-seek bgzf) 0)
                                 (return udata))
-                            (setf (bgzf-eof bgzf) t)))))
+                              (setf (bgzf-eof bgzf) t)))))
       (unless (bgzf-loaded-p bgzf)
         (inflate-from-bgz)
         (setf (bgzf-loaded-p bgzf) t))
@@ -77,7 +77,7 @@ reentrant.")
                 (incf num-read n)
                 (if (buffer-empty-p)
                     (inflate-from-bgz)
-                  (incf (bgzf-offset bgzf) n))
+                    (incf (bgzf-offset bgzf) n))
                 inflated)
                (t
                 (loop
@@ -89,7 +89,7 @@ reentrant.")
                         (incf num-read)
                         (if (buffer-empty-p)
                             (setf buf (inflate-from-bgz))
-                          (incf (bgzf-offset bgzf))))
+                            (incf (bgzf-offset bgzf))))
                    finally (return inflated))))
          num-read)))))
 
@@ -99,7 +99,7 @@ string. The NULL-TERMINATED keyword is used to indicate whether the C
 string is null-terminated so that the terminator may be consumed."
   (let ((len (if null-terminated
                  (1- n)
-               n)))
+                 n)))
     (let ((bytes (read-bytes bgzf n)))
       (make-sb-string bytes 0 (1- len)))))
 

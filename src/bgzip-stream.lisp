@@ -24,7 +24,7 @@
 
 (deftype bgzip-buffer ()
   "Buffer type for {defclass bgzip-input-stream} internal buffer."
-  `(simple-array (unsigned-byte 8) (,+bgzip-buffer-size+)))
+  `(simple-array octet (,+bgzip-buffer-size+)))
 
 (deftype bgzip-buffer-index ()
   "Index type for {defclass bgzf-input-stream} internal buffer."
@@ -87,7 +87,7 @@ Returns:
     (unwind-protect
          (if (bgzf-close (slot-value stream 'bgzf))
              t
-           (error 'bgzf-io-error :text "failed to close file cleanly"))
+             (error 'bgzf-io-error :text "failed to close file cleanly"))
       (call-next-method))))
 
 (defmethod stream-file-position ((stream bgzip-input-stream) &optional position)
@@ -170,22 +170,22 @@ Returns:
                          finally (return seq-index))))))
     (if (and (buffer-empty-p stream) (zerop (the fixnum (fill-buffer stream))))
         0
-      (with-slots (buffer offset num-bytes)
-          stream
-        (declare (type bgzip-buffer buffer)
-                 (type bgzip-buffer-index offset num-bytes)
-                 (type fixnum start))
-        (typecase sequence
-          (simple-octet-vector
-           (define-copy-op simple-octet-vector aref
-             :speed 3 :safety 0))
-          (simple-vector
-           (define-copy-op simple-vector svref
-             :speed 3 :safety 0))
-          ((simple-array * (*))
-           (define-copy-op (simple-array * (*)) aref))
-          (list
-           (define-copy-op list elt
-             :speed 3 :safety 0))
-          (t
-           (define-copy-op sequence elt)))))))
+        (with-slots (buffer offset num-bytes)
+            stream
+          (declare (type bgzip-buffer buffer)
+                   (type bgzip-buffer-index offset num-bytes)
+                   (type fixnum start))
+          (typecase sequence
+            (simple-octet-vector
+             (define-copy-op simple-octet-vector aref
+               :speed 3 :safety 0))
+            (simple-vector
+             (define-copy-op simple-vector svref
+               :speed 3 :safety 0))
+            ((simple-array * (*))
+             (define-copy-op (simple-array * (*)) aref))
+            (list
+             (define-copy-op list elt
+               :speed 3 :safety 0))
+            (t
+             (define-copy-op sequence elt)))))))
