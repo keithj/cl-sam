@@ -23,7 +23,8 @@
   "Writes the BAM magic number to the handle BGZF."
   (write-bytes bgzf *bam-magic* (length *bam-magic*) :compress compress))
 
-(defun write-bam-header (bgzf header &key (compress t) (null-padding 0))
+(defun write-bam-header (bgzf header &key (compress t) (null-padding 0)
+                         (mtime 0))
   "Writes the BAM header string HEADER to handle BGZF, followed by
 padding of NULL-PADDING null bytes. This function also writes the
 header length, including padding, in the 4 bytes preceding the
@@ -37,7 +38,7 @@ header."
       (let ((hcodes (make-array hlen :element-type 'octet)))
         (map-into hcodes #'char-code header)
         (replace buffer hcodes :start1 4)))
-    (write-bytes bgzf buffer (length buffer) :compress compress)))
+    (write-bytes bgzf buffer (length buffer) :compress compress :mtime mtime)))
 
 (defun write-num-references (bgzf n)
   "Writes the number of reference sequences N to handle BGZF."

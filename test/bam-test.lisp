@@ -174,25 +174,26 @@
 (addtest (cl-sam-tests) pcr/optical-duplicate-p/1
   (ensure (pcr/optical-duplicate-p #x0400)))
 
-;; Commented out because the data file in git is currently old style,
-;; without the EOF marker.
-
-;; (addtest (cl-sam-tests) bam-byte-round-trip/1
-;;   (let ((in-filespec (namestring (merge-pathnames "data/c1215.bam")))
-;;         (out-filespec (namestring
-;;                        (tmp-pathname :tmpdir (merge-pathnames "data")
-;;                                      :basename "bam-roundtrip-"))))
-;;     (with-bgzf (in in-filespec :direction :input)
-;;       (with-bgzf (out out-filespec :direction :output)
-;;         (multiple-value-bind (header num-refs ref-meta)
-;;             (read-bam-meta in)
-;;           (write-bam-meta out header num-refs ref-meta)
-;;           (loop
-;;              for aln = (read-alignment in)
-;;              while aln
-;;              do (write-alignment out aln)))))
-;;     (test-binary-files in-filespec out-filespec)
-;;     (delete-file out-filespec)))
+(addtest (cl-sam-tests) bam-byte-round-trip/1
+  (let ((in-filespec (namestring (merge-pathnames "data/c1215.bam")))
+        (out-filespec (namestring
+                       (tmp-pathname :tmpdir (merge-pathnames "data")
+                                     :basename "bam-roundtrip-"))))
+    (with-bgzf (in in-filespec :direction :input)
+      (with-bgzf (out out-filespec :direction :output)
+        (multiple-value-bind (header num-refs ref-meta)
+            (read-bam-meta in)
+          (write-bam-meta out header num-refs ref-meta)
+          (loop
+             for aln = (read-alignment in)
+             while aln
+             do (write-alignment out aln)))))
+    (test-binary-files in-filespec out-filespec)
+    (with-bgzf (in in-filespec :direction :input)
+      (ensure (bgzf-eof-p in)))
+    (with-bgzf (out out-filespec :direction :input)
+      (ensure (bgzf-eof-p out)))
+    (delete-file out-filespec)))
 
 (addtest (cl-sam-tests) bam-semantic-round-trip/1
   (with-bgzf (bgzf (merge-pathnames "data/c1215.bam") :direction :input)

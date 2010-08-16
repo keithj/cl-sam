@@ -26,8 +26,9 @@ data. Rebind this per thread to make {defun write-bgz-member}
 reentrant.")
 
 (declaim (ftype (function (bgzf simple-octet-vector vector-index
-                           &key (:compress t)) fixnum) write-bytes))
-(defun write-bytes (bgzf bytes n &key (compress t))
+                           &key (:compress t) (:mtime integer)) fixnum)
+                write-bytes))
+(defun write-bytes (bgzf bytes n &key (compress t) (mtime 0))
   (declare (optimize (speed 3) (safety 1)))
   (let ((stream (bgzf-stream bgzf)))
     (declare (type simple-octet-vector bytes)
@@ -48,13 +49,13 @@ reentrant.")
                      (gz:deflate-vector buf cdata
                        :compression (if compress
                                         (bgzf-compression bgzf)
-                                      0)
+                                        0)
                        :suppress-header t :window-bits 15 :backoff 1024)
                    (declare (ignore deflated))
                    (declare (type bgz-payload-index bytes-in bytes-out))
                    (let* ((udata (subseq buf 0 bytes-in))
                           (bgz (make-bgz-member
-                                :mtime (get-universal-time) :xlen +xlen+
+                                :mtime mtime :xlen +xlen+
                                 :udata udata :cdata cdata :cend bytes-out
                                 :bsize (+ bytes-out +member-header-length+
                                           +member-footer-length+)
@@ -63,7 +64,7 @@ reentrant.")
                      (write-bgz-member bgz stream)
                      (if (< bytes-in (length buf)) ; Didn't fit
                          (store-overflow bytes-in)
-                       (setf (bgzf-pointer bgzf) 0))
+                         (setf (bgzf-pointer bgzf) 0))
                      buf)))))
       (cond ((< (+ (bgzf-pointer bgzf) n) (1- (length (bgzf-buffer bgzf))))
              (replace (bgzf-buffer bgzf) bytes :start1 (bgzf-pointer bgzf))
@@ -80,10 +81,10 @@ reentrant.")
                      (setf (aref buffer (bgzf-pointer bgzf)) (aref bytes i))
                      (if (buffer-full-p)
                          (setf buffer (deflate-to-bgz))
-                       (incf (bgzf-pointer bgzf))))
+                         (incf (bgzf-pointer bgzf))))
                 finally (return n)))))))
 
-(defun bgzf-flush (bgzf &key (compress t) (append-eof t))
+(defun bgzf-flush (bgzf &key (compress t) (append-eof t) (mtime 0))
   (if (plusp (bgzf-pointer bgzf))
       (let ((buffer (subseq (bgzf-buffer bgzf) 0 (bgzf-pointer bgzf)))
             (cdata (make-array +bgz-max-payload-length+ :element-type 'octet
@@ -92,11 +93,11 @@ reentrant.")
             (gz:deflate-vector buffer cdata
               :compression (if compress
                                (bgzf-compression bgzf)
-                             0)
+                               0)
               :suppress-header t :window-bits 15 :backoff 1024)
           (declare (ignore deflated))
           (let* ((udata (subseq buffer 0 bytes-in))
-                 (bgz (make-bgz-member :mtime (get-universal-time)
+                 (bgz (make-bgz-member :mtime mtime
                                        :xlen +xlen+ :udata udata
                                        :cdata cdata :cend bytes-out
                                        :bsize (+ bytes-out
@@ -110,7 +111,7 @@ reentrant.")
                   (replace buffer overflow)
                   (setf (bgzf-pointer bgzf) (length overflow))
                   (bgzf-flush bgzf)) ; Flush again to write the overflow
-              (setf (bgzf-pointer bgzf) 0))))))
+                (setf (bgzf-pointer bgzf) 0))))))
   (when append-eof
     (write-sequence *empty-bgz-record* (bgzf-stream bgzf))))
 
@@ -144,7 +145,7 @@ Returns:
       (encode-bytes (bgz-member-id2 bgz) 1 stream)
       (encode-bytes (bgz-member-cm bgz) 1 stream)
       (encode-bytes (bgz-member-flg bgz) 1 stream)
-      (encode-bytes (get-universal-time) 4 stream)
+      (encode-bytes (bgz-member-mtime bgz) 4 stream)         ; mtime
       (encode-bytes (bgz-member-xfl bgz) 1 stream)
       (encode-bytes gz:+os-unknown+ 1 stream)
       (encode-bytes (bgz-member-xlen bgz) 2 stream)

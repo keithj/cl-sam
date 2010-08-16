@@ -34,19 +34,4 @@
                                 (file-position s2 (1- (file-position s2))))
                                ((null byte2)
                                 (file-position s1 (1- (file-position s1))))))
-              :report "files were not byte identical")
-      ;; Files may have an empty BGZF record as EOF terminator
-      (let ((eof1 (loop
-                     for byte = (read-byte s1 nil nil)
-                     while byte
-                     collect byte))
-            (eof2 (loop
-                     for byte = (read-byte s2 nil nil)
-                     while byte
-                     collect byte)))
-        (ensure (or (null eof1) (equalp sam::*empty-bgz-record* eof1))
-                :report "expected nil or ~a but found ~a"
-                :arguments (sam::*empty-bgz-record* eof1))
-        (ensure (or (null eof2) (equalp sam::*empty-bgz-record* eof2))
-                :report "expected nil or ~a but found ~a"
-                :arguments (sam::*empty-bgz-record* eof2))))))
+              :report "files were not byte identical"))))
