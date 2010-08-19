@@ -23,11 +23,10 @@
   "Reads the BAM magic number from the handle BGZF and returns T if it
 is valid or raises a {define-condition malformed-file-error} if not."
   (let ((magic (read-bytes bgzf 4)))
-    (unless (equalp *bam-magic* magic)
-      (error 'malformed-file-error :file (bgzf-pathname bgzf)
-             :format-control "invalid BAM magic number ~a"
-             :format-arguments (list magic)))
-    t))
+    (or (equalp *bam-magic* magic)
+        (error 'malformed-file-error :file (bgzf-pathname bgzf)
+               :format-control "invalid BAM magic number ~a"
+               :format-arguments (list magic)))))
 
 (defun read-bam-header (bgzf)
   "Returns the unparsed BAM header from the handle BGZF as a Lisp
@@ -80,7 +79,6 @@ list of reference identifier, reference name and reference length."
 (defun read-bam-terminator (bgzf)
   "Reads the EOF from handle BGZF, returning T if it is present, or
 raising a {define-condition malformed-file-error} otherwise."
-  (if (bgzf-eof-p bgzf)
-      t
+  (or (bgzf-eof-p bgzf)
       (error 'malformed-file-error :file (bgzf-pathname bgzf)
              :format-control "BGZF EOF was missing")))
