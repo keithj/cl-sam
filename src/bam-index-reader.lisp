@@ -63,14 +63,15 @@ or raises a {define-condition malformed-file-error} if not."
 
 (defun read-bam-index (stream)
   "Reads a BAM (.bai) index from STREAM."
-  (let ((bytes (make-array 4 :element-type 'octet :initial-element 0)))
-    (read-sequence bytes stream)
-    (let ((num-refs (decode-int32le bytes)))
-      (loop
-         with refs = (make-array num-refs)
-         for i from 0 below num-refs
-         do (setf (svref refs i) (read-ref-index stream))
-         finally (return (make-bam-index :refs refs))))))
+  (when (read-index-magic stream)
+    (let ((bytes (make-array 4 :element-type 'octet :initial-element 0)))
+      (read-sequence bytes stream)
+      (let ((num-refs (decode-int32le bytes)))
+        (loop
+           with refs = (make-array num-refs)
+           for i from 0 below num-refs
+           do (setf (svref refs i) (read-ref-index stream))
+           finally (return (make-bam-index :refs refs)))))))
 
 (defun read-ref-index (stream)
   "Reads an index for a single reference sequence from STREAM."
