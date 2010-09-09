@@ -126,7 +126,7 @@ a 512 Mbp region, bins 1-8 span 64 Mbp, 9-72 8 Mbp, 73-584 1 Mbp,
 (defun region-to-interval (coord)
   "Given a coordinate COORD, returns the array index of its interval
 in the BAM linear index."
-  (floor start +linear-bin-size+))
+  (floor coord +linear-bin-size+))
 
 (defun find-bins (bam-index ref-num start end)
   (let ((bin-nums (region-to-bins start end))
