@@ -247,7 +247,7 @@ of record keys and values."
   "Returns T if parsed SAM-HEADER indicates that the file is sorted by
 name, or NIL otherwise."
   (check-arguments (listp sam-header) (sam-header) "expected a parsed header")
-  (eql :name (assocdr :so (header-tags (assoc :hd sam-header)))))
+  (eql :queryname (assocdr :so (header-tags (assoc :hd sam-header)))))
 
 (defun coordinate-sorted-p (sam-header)
   "Returns T if parsed SAM-HEADER indicates that the file is sorted by
