@@ -243,6 +243,18 @@ of record keys and values."
                             :format-arguments (list clashes)))
                    record)))))
 
+(defun name-sorted-p (sam-header)
+  "Returns T if parsed SAM-HEADER indicates that the file is sorted by
+name, or NIL otherwise."
+  (check-arguments (listp sam-header) (sam-header) "expected a parsed header")
+  (eql :name (assocdr :so (header-tags (assoc :hd sam-header)))))
+
+(defun coordinate-sorted-p (sam-header)
+  "Returns T if parsed SAM-HEADER indicates that the file is sorted by
+coordinate, or NIL otherwise."
+  (check-arguments (listp sam-header) (sam-header) "expected a parsed header")
+  (eql :coordinate (assocdr :so (header-tags (assoc :hd sam-header)))))
+
 (defun hd-record (&key (version *sam-version*) (sort-order :unsorted)
                   (group-order :none))
   (assert (stringp version) (version)

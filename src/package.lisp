@@ -144,6 +144,10 @@
    #:write-header-record
    #:write-sam-alignment
 
+   ;; SAM header convenience
+   #:name-sorted-p
+   #:coordinate-sorted-p
+
    ;; SAM header editing
    #:merge-sam-headers
    #:merge-header-records

@@ -21,18 +21,17 @@
 
 (defun view-sam (bam-filespec sam-filespec)
   (let ((*print-pretty* nil))
-    (with-bgzf (bgzf bam-filespec)
-      (with-open-file (out sam-filespec
+    (with-bgzf (bam bam-filespec)
+      (with-open-file (sam sam-filespec
                            :direction :output :element-type 'base-char
-                           :external-format :ascii
-                           :if-exists :supersede)
-        (stream-view-sam bgzf out)))))
+                           :external-format :ascii :if-exists :supersede)
+        (stream-view-sam bam sam)))))
 
-(defun stream-view-sam (bgzf &optional (stream t))
-  (unless (zerop (bgzf-tell bgzf))    ; Rewind unless already at start
-    (bgzf-seek bgzf 0))
+(defun stream-view-sam (bam &optional (stream t))
+  (unless (zerop (bgzf-tell bam))     ; Rewind unless already at start
+    (bgzf-seek bam 0))
   (multiple-value-bind (header num-refs ref-meta)
-      (read-bam-meta bgzf)
+      (read-bam-meta bam)
     (declare (ignore num-refs))
     (declare (optimize (speed 3) (safety 0)))
     (write-sam-header (ensure-order
@@ -40,17 +39,17 @@
                         (make-sam-header header)) :sort) stream)
     (loop
        with refs = (make-reference-table ref-meta)
-       for alignment = (read-alignment bgzf)
+       for alignment = (read-alignment bam)
        while alignment
        count alignment into total
        do (write-sam-alignment alignment refs stream)
        finally (return total))))
 
 (defun flagstat (bam-filespec)
-  (with-bgzf (bgzf bam-filespec :direction :input)
-    (read-bam-meta bgzf)
+  (with-bgzf (bam bam-filespec :direction :input)
+    (read-bam-meta bam)
     (loop
-       for alignment = (read-alignment bgzf)
+       for alignment = (read-alignment bam)
        while alignment
        for flag = (alignment-flag alignment)
        count flag into total
