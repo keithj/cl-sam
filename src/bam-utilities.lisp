@@ -22,13 +22,13 @@
 (defun repair-mapping-flags (aln)
   "Returns alignment ALN if it has correct mapped-proper-pair,
 query-mapped and mate-mapped flags, or a modified copy with fixed
-flags. Also sets the user flag ZF:I:<original flag> if the flags are
+flags. Also sets the user tag ZF:I:<original flag> if the flags are
 changed.
 
 Alignments produced by the BWA have been observed to contain invalid
-flags, caused BWA creating mappings that overhang the end of the
-reference (caused by reference concatenation in the Burrows-Wheeler
-index).
+flags. This is caused by BWA creating mappings that overhang the end
+of the reference. The underlying cause is reference concatenation in
+the Burrows-Wheeler index.
 
 This function attempts to fix invalid mapped-proper-pair flags in
 cases where query-unmapped and/or mate-unmapped flags are set. Such
