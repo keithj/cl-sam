@@ -45,37 +45,46 @@
        do (write-sam-alignment alignment refs stream)
        finally (return total))))
 
-(defun flagstat (bam-filespec)
+(defun flagstat (bam-filespec &optional (stream t))
+  "Writes SAM flag counts from BAM-FILESPEC to STREAM."
   (with-bgzf (bam bam-filespec :direction :input)
     (read-bam-meta bam)
-    (loop
-       for alignment = (read-alignment bam)
-       while alignment
-       for flag = (alignment-flag alignment)
-       count flag into total
-       count (fails-platform-qc-p flag) into qc-fail
-       count (pcr/optical-duplicate-p flag) into duplicates
-       count (query-mapped-p flag) into mapped
-       count (sequenced-pair-p flag) into seq-paired
-       count (first-in-pair-p flag) into read1
-       count (second-in-pair-p flag) into read2
-       count (mapped-proper-pair-p flag) into proper-paired
-       count (and (query-mapped-p flag)
-                  (mate-mapped-p flag)) into both-mapped
-       count (mate-unmapped-p flag) into singletons
-       finally (format t #.(str "~d in total~%"
-                                "~d QC failure~%"
-                                "~d duplicates~%" 
-                                "~d mapped (~$%)~%"
-                                "~d paired in sequencing~%" 
-                                "~d read1~%"
-                                "~d read2~%" 
-                                "~d properly paired (~$%)~%"
-                                "~d both mapped~%" 
-                                "~d singletons (~$%)~%")
-                       total qc-fail duplicates mapped
-                       (* 100 (/ mapped total))
-                       seq-paired read1 read2 proper-paired
-                       (* 100 (/ proper-paired total))
-                       both-mapped singletons
-                       (* 100 (/ singletons total))))))
+    (let ((repaired 0))
+      (handler-bind
+          ((malformed-record-error
+            (lambda (c)
+              (incf repaired)
+              (use-value (repair-mapping-flags (record-of c))))))
+        (loop
+           for alignment = (read-alignment bam :validate t)
+           while alignment
+           for flag = (alignment-flag alignment)
+           count flag into total
+           count (fails-platform-qc-p flag) into qc-fail
+           count (pcr/optical-duplicate-p flag) into duplicates
+           count (query-mapped-p flag) into mapped
+           count (sequenced-pair-p flag) into seq-paired
+           count (first-in-pair-p flag) into read1
+           count (second-in-pair-p flag) into read2
+           count (mapped-proper-pair-p flag) into proper-paired
+           count (and (query-mapped-p flag)
+                      (mate-mapped-p flag)) into both-mapped
+           count (mate-unmapped-p flag) into singletons
+           finally (format stream #.(str "~d in total~%"
+                                         "~d QC failure~%"
+                                         "~d duplicates~%" 
+                                         "~d mapped (~$%)~%"
+                                         "~d paired in sequencing~%" 
+                                         "~d read1~%"
+                                         "~d read2~%" 
+                                         "~d properly paired (~$%)~%"
+                                         "~d both mapped~%" 
+                                         "~d singletons (~$%)~%"
+                                         "~d with repaired mapping flags~%")
+                           total qc-fail duplicates mapped
+                           (* 100 (/ mapped total))
+                           seq-paired read1 read2 proper-paired
+                           (* 100 (/ proper-paired total))
+                           both-mapped singletons
+                           (* 100 (/ singletons total))
+                           repaired))))))

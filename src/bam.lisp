@@ -163,12 +163,21 @@ Optional:
   "MAQ pair flag (MAQ specific).")
 
 ;;; Various user tag extensions
-(define-alignment-tag :x0 :int32)
-(define-alignment-tag :x1 :int32)
-(define-alignment-tag :xg :int32)
-(define-alignment-tag :xm :int32)
-(define-alignment-tag :xO :int32)
-(define-alignment-tag :xt :char)
+;;; cl-sam
+(define-alignment-tag :zf :int32 "cl-sam: original flag before correction")
+
+;;; BWA
+(define-alignment-tag :x0 :int32 "BWA: number of best hits")
+(define-alignment-tag :x1 :int32 "BWA: number of suboptimal hits")
+(define-alignment-tag :xa :string "BWA: alternative hits (chr,pos,CIGAR,NM;)*")
+(define-alignment-tag :xe :int32 "BWA: numnber of supporting reads")
+(define-alignment-tag :xf :int32
+  "BWA: support from forward or reverse alignment")
+(define-alignment-tag :xg :int32 "BWA: number of gap extensions")
+(define-alignment-tag :xm :int32 "BWA: numner of mismatches in alignment")
+(define-alignment-tag :xo :int32 "BWA: number of gap opens")
+(define-alignment-tag :xs :int32 "BWA: suboptimal alignment score")
+(define-alignment-tag :xt :char "BWA: Type: Unique/Repeat/N/Mate-sw")
 
 (defun make-reference-table (ref-meta-list)
   "Returns a hash-table mapping reference identifiers to reference
@@ -269,16 +278,18 @@ Returns:
                               (insert-length (insert-length aln))
                               (cigar (alignment-cigar aln))
                               (tag-values (alignment-tag-values aln)))
-  ""
-  (let ((alignment-flag (or alignment-flag (alignment-flag aln :validate nil))))
-    (apply #'make-alignment-record (read-name aln) alignment-flag
-           (seq-string aln)
-           :reference-id reference-id :alignment-pos alignment-pos
-           :mate-reference-id mate-reference-id
-           :mate-alignment-pos mate-alignment-pos
-           :mapping-quality mapping-quality :alignment-bin alignment-bin
-           :insert-length insert-length :cigar cigar
-           :quality-str (quality-string aln) :tag-values tag-values)))
+  "Returns a copy of ALN, optionally setting some fields to new values."
+  (let ((alignment-flag (or alignment-flag (alignment-flag aln))))
+    (make-alignment-record (read-name aln) (seq-string aln) alignment-flag
+                           :reference-id reference-id
+                           :alignment-pos alignment-pos
+                           :mate-reference-id mate-reference-id
+                           :mate-alignment-pos mate-alignment-pos
+                           :mapping-quality mapping-quality
+                           :alignment-bin alignment-bin
+                           :insert-length insert-length :cigar cigar
+                           :quality-str (quality-string aln)
+                           :tag-values tag-values)))
 
 (defun flag-bits (flag &rest bit-names)
   "Returns an integer FLAG that had BAM flag bits named by symbols
@@ -309,28 +320,28 @@ Returns:
   (let ((f flag))
     (dolist (name bit-names (ensure-valid-flag f))
       (destructuring-bind (bit value)
-        (ecase name
-          (:sequenced-pair        '( 0 1))
-          (:mapped-proper-pair    '( 1 1))
-          (:query-mapped          '( 2 0))
-          (:query-unmapped        '( 2 1))
-          (:mate-mapped           '( 3 0))
-          (:mate-unmapped         '( 3 1))
-          (:query-forward         '( 4 0))
-          (:query-reverse         '( 4 1))
-          (:mate-forward          '( 5 0))
-          (:mate-reverse          '( 5 1))
-          (:first-in-pair         '( 6 1))
-          (:second-in-pair        '( 7 1))
-          (:alignment-primary     '( 8 0))
-          (:alignment-not-primary '( 8 1))
-          (:fails-platform-qc     '( 9 1))
-          (:pcr/optical-duplicate '(10 1)))
+          (ecase name
+            (:sequenced-pair          '( 0 1))
+            (:not-mapped-proper-pair  '( 1 0))
+            (:mapped-proper-pair      '( 1 1))
+            (:query-mapped            '( 2 0))
+            (:query-unmapped          '( 2 1))
+            (:mate-mapped             '( 3 0))
+            (:mate-unmapped           '( 3 1))
+            (:query-forward           '( 4 0))
+            (:query-reverse           '( 4 1))
+            (:mate-forward            '( 5 0))
+            (:mate-reverse            '( 5 1))
+            (:first-in-pair           '( 6 1))
+            (:second-in-pair          '( 7 1))
+            (:alignment-primary       '( 8 0))
+            (:alignment-not-primary   '( 8 1))
+            (:fails-platform-qc       '( 9 1))
+            (:pcr/optical-duplicate   '(10 1)))
         (setf (ldb (byte 1 bit) f) value)))))
 
-;; (declaim (ftype (function (simple-octet-vector) (signed-byte 32))
-;;                 reference-id))
-(declaim (inline reference-id))
+(declaim (ftype (function (simple-octet-vector) (signed-byte 32))
+                reference-id))
 (defun reference-id (aln)
   "Returns the reference sequence identifier of ALIGNMENT-RECORD. This
 is an integer locally assigned to a reference sequence within the
@@ -338,9 +349,8 @@ context of a BAM file."
   (declare (optimize (speed 3)))
   (decode-int32le aln 0))
 
-;; (declaim (ftype (function (simple-octet-vector) (signed-byte 32))
-;;                 alignment-position))
-(declaim (inline alignment-position))
+(declaim (ftype (function (simple-octet-vector) (signed-byte 32))
+                alignment-position))
 (defun alignment-position (aln)
   "Returns the 0-based sequence coordinate of ALIGNMENT-RECORD in the
 reference sequence of the first base of the clipped read."
@@ -378,11 +388,10 @@ ALIGNMENT-RECORD has been assigned."
   "Returns the number of CIGAR operations in ALIGNMENT-RECORD."
   (decode-uint16le aln 12))
 
-;; (declaim (ftype (function ((simple-octet-vector) &key (:validate t))
-;;                           (unsigned-byte 16))
-;;                 alignment-flag))
-(declaim (inline alignment-flag))
-(defun alignment-flag (aln &key (validate t))
+(declaim (ftype (function ((simple-octet-vector) &key (:validate t))
+                          (unsigned-byte 16))
+                alignment-flag))
+(defun alignment-flag (aln &key validate)
   "Returns an integer whose bits are flags that describe properties of
 the ALIGNMENT-RECORD. If the VALIDATE key is T (the default) the
 flag's bits are checked for internal consistency."
@@ -495,15 +504,12 @@ or NIL otherwise."
 (defun valid-flag-p (flag)
   "Returns T if the paired-read-specific bits of FLAG are internally
 consistent."
-  (cond ((mapped-proper-pair-p flag)
-         (and (sequenced-pair-p flag)
-              (valid-pair-num-p flag)
-              (valid-mapped-proper-pair-p flag)))
+  (cond ((and (sequenced-pair-p flag) (mapped-proper-pair-p flag))
+         (and (valid-pair-num-p flag) (valid-mapped-proper-pair-p flag)))
         ((sequenced-pair-p flag)
          (valid-pair-num-p flag))
         (t
-         (not (or (mate-reverse-p flag) ; maybe ignore this one?
-                  (mate-unmapped-p flag)
+         (not (or (mate-unmapped-p flag)
                   (first-in-pair-p flag)
                   (second-in-pair-p flag))))))
 
@@ -564,7 +570,7 @@ length."
     (declare (ignore read-len cigar-index cigar-bytes qual-index seq-index))
     (decode-tag-values aln tag-index)))
 
-(defun alignment-core (aln &key (validate t))
+(defun alignment-core (aln &key validate)
   "Returns a list of the core data described by ALIGNMENT-RECORD. The
 list elements are comprised of reference-id, alignment-position,
 read-name length, mapping-quality alignment-bin, cigar length,
@@ -582,7 +588,7 @@ alignment-position and insert length."
         (mate-alignment-position aln)
         (insert-length aln)))
 
-(defun alignment-core-alist (aln &key (validate t))
+(defun alignment-core-alist (aln &key validate)
   "Returns the same data as {defun alignment-core} in the form of an
 alist."
   (pairlis '(:reference-id :alignment-pos :read-name-length
@@ -591,7 +597,7 @@ alist."
              :mate-alignment-position :insert-length)
            (alignment-core aln :validate validate)))
 
-(defun alignment-flag-alist (aln &key (validate t))
+(defun alignment-flag-alist (aln &key validate)
   "Returns the bitwise flags of ALIGNMENT-RECORD in the form of an
 alist. The primary purpose of this function is debugging."
   (let ((flag (alignment-flag aln :validate validate)))

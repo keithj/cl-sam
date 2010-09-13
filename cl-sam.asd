@@ -23,7 +23,7 @@
 
 (defsystem cl-sam
     :name "cl-sam"
-    :version "0.8.3"
+    :version "0.9.0"
     :author "Keith James"
     :licence "GPL v3"
     :depends-on ((:version :cffi "0.10.3")
@@ -50,6 +50,7 @@
                            (:file "external-bam-sort")
                            (:file "bam-index")
                            (:file "bam-index-reader")
+                           (:file "bam-utilities")
                            (:file "cl-sam")))
      (:lift-test-config :lift-tests
                         :pathname "cl-sam-test"

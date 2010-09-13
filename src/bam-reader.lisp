@@ -50,16 +50,25 @@ an integer,"
                                                       :null-terminated t))
             (decode-int32le (read-bytes bgzf 4)))))
 
-(defun read-alignment (bgzf)
+(defun read-alignment (bgzf &key validate)
   "Reads one alignment block from handle BGZF, returns it as a Lisp
 array of unsigned-byte 8. The handle is advanced to the next
-alignment. If no more alignments are available, returns NIL."
+alignment. If no more alignments are available, returns NIL.
+
+This is the preferred function to use for validation. i.e. validate
+early. A USE-VALUE restart is provided so that an invalid alignment
+may be modified and re-read without unwinding the stack."
   (declare (optimize (speed 3)))
   (let ((size-bytes (read-bytes bgzf 4)))
     (if (null size-bytes)
         nil
-        (let ((block-size (decode-int32le size-bytes)))
-          (read-bytes bgzf block-size)))))
+        (let* ((block-size (decode-int32le size-bytes))
+               (aln (read-bytes bgzf block-size)))
+          (restart-case
+              (if validate
+                  (and (alignment-flag aln :validate t) aln)
+                  aln)
+            (use-value (value) value))))))
 
 (defun read-bam-meta (bgzf)
   "Reads all BAM metadata from handle BGZF, leaving the handle
