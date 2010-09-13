@@ -120,6 +120,7 @@
    #:alignment-flag-alist
 
    #:make-alignment-record
+   #:copy-alignment-record
    #:make-reference-table
    #:flag-bits
    #:define-alignment-tag
