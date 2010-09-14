@@ -69,7 +69,8 @@
            count (mapped-proper-pair-p flag) into proper-paired
            count (and (query-mapped-p flag)
                       (mate-mapped-p flag)) into both-mapped
-           count (mate-unmapped-p flag) into singletons
+           count (and (query-mapped-p flag)
+                      (mate-unmapped-p flag)) into singletons
            finally (format stream #.(str "~d in total~%"
                                          "~d QC failure~%"
                                          "~d duplicates~%" 
