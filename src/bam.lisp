@@ -947,7 +947,7 @@ FLAG in ALIGNMENT-RECORD, with MESSAGE."
       (let ((reference-id (reference-id aln))
             (read-name (read-name aln))
             (pos (alignment-position aln)))
-        (error 'malformed-field-error :field flag
+        (error 'malformed-field-error :record aln :field flag
                :format-control (txt "invalid flag ~b set for read ~s at ~a"
                                     "in reference ~d: ~a")
                :format-arguments (list flag read-name pos reference-id
