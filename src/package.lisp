@@ -126,7 +126,7 @@
    #:define-alignment-tag
    #:alignment-tag-documentation
 
-   #:fix-pair-mapping-flags
+   #:repair-mapping-flags
 
    ;; BAM sorting
    #:sort-bam-file
