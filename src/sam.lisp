@@ -19,22 +19,21 @@
 
 (in-package :sam)
 
-(defparameter *sam-version* "0.1.2-draft (20090416)"
-  "The SAM version written by cl-sam. This is a revision of the draft
-  that does not support @CO header lines, which were introduced
-  later.")
+(defparameter *sam-version* "0.1.2-draft (20090820)"
+  "The SAM version written by cl-sam.")
 
-(defparameter *valid-header-types* '(:hd :sq :rg :pg)
+(defparameter *valid-header-types* '(:hd :sq :rg :pg :co)
   "A list of valid SAM header types.")
 (defparameter *mandatory-header-tags*
-  (pairlis *valid-header-types* '((:vn) (:sn :ln) (:id :sm) (:id)))
+  (pairlis *valid-header-types* '((:vn) (:sn :ln) (:id :sm) (:id) nil))
   "A mapping that describes the mandatory tags for each SAM header
   record type.")
 (defparameter *valid-header-tags*
   (pairlis *valid-header-types* '((:vn :so :go)
                                   (:sn :ln :as :m5 :ur :sp)
                                   (:id :sm :lb :ds :pu :pi :cn :dt :pl)
-                                  (:id :vn :cl)))
+                                  (:id :vn :cl)
+                                  nil))
   "A mapping that describes the valid tags for each SAM header record
   type.")
 (defparameter *valid-sort-orders* '(:unsorted :coordinate :queryname)
@@ -128,6 +127,8 @@ and the rest of the list is itself an alist of record keys and values."
                   (cons :rg (tags #'parse-rg-tag)))
                  ((starts-with-string-p str "@PG")
                   (cons :pg (tags #'parse-pg-tag)))
+                 ((starts-with-string-p str "@CO")
+                  (cons :co (subseq str 3)))
                  (t
                   (error 'malformed-record-error :record str
                          :format-control "invalid SAM header record type")))))
@@ -162,11 +163,11 @@ a {define-condition malformed-record-error} ."
          (tags (header-tags record))
          (mandatory (mandatory-header-tags header-type))
          (tag-keys (mapcar #'first tags)))
-    (unless (and mandatory (subsetp mandatory tag-keys))
+    (unless (subsetp mandatory tag-keys)
       (let ((diff (set-difference mandatory tag-keys)))
-      (error 'malformed-record-error :record record
-             :format-control "~r missing mandatory tag~:p ~a"
-             :format-arguments (list (length diff) diff))))
+        (error 'malformed-record-error :record record
+               :format-control "~r missing mandatory tag~:p ~a"
+               :format-arguments (list (length diff) diff))))
     record))
 
 (defun ensure-valid-header-tags (record)
