@@ -43,7 +43,7 @@
   (ensure (ensure-mandatory-header-tags '(:rg (:id . "foo") (:sm . "bar"))))
   (ensure (ensure-mandatory-header-tags '(:pg (:id . "foo"))))
   ;; CO has no tags
-  (ensure (ensure-mandatory-header-tags '(:co))))
+  (ensure (ensure-mandatory-header-tags '(:co . "foo"))))
 
 (addtest (cl-sam-tests) ensure-mandatory-header-tags/2
   (ensure-condition malformed-record-error
@@ -64,7 +64,7 @@
 
 (addtest (cl-sam-tests) ensure-valid-header-tags/3
   ;; CO has no tags
-  (ensure-valid-header-tags '(:co)))
+  (ensure-valid-header-tags '(:co . "foo")))
 
 (addtest (cl-sam-tests) merge-sam-headers/1
   (let ((header '((:hd (:vn . "1.0"))

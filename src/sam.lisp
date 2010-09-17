@@ -143,7 +143,9 @@ one of :HD , :SQ , :RG or :PG ."
 
 (defun header-tags (record)
   "Returns an alist of the tag-values of HEADER-RECORD."
-  (rest record))
+  (if (atom (rest record))
+      nil
+      (rest record)))
 
 (defun mandatory-header-tags (header-type)
   "Returns a list of the mandatory tags for SAM header
