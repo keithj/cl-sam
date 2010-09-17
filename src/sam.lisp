@@ -128,7 +128,7 @@ and the rest of the list is itself an alist of record keys and values."
                  ((starts-with-string-p str "@PG")
                   (cons :pg (tags #'parse-pg-tag)))
                  ((starts-with-string-p str "@CO")
-                  (cons :co (subseq str 3)))
+                  (cons :co (second (string-split str #\Tab))))
                  (t
                   (error 'malformed-record-error :record str
                          :format-control "invalid SAM header record type")))))
@@ -236,15 +236,17 @@ of record keys and values."
       (loop
          for line = (read-line s nil nil)
          while line
-         for (header-type . tags) = (make-header-record line)
-         collect (let* ((tags (remove-duplicates tags :test #'equal))
-                        (clashes (find-duplicate-header-tags tags))
-                        (record (cons header-type tags)))
-                   (when clashes
-                     (error 'malformed-record-error :record record
-                            :format-control "clashing tags ~a"
-                            :format-arguments (list clashes)))
-                   record)))))
+         for (header-type . content) = (make-header-record line)
+         collect (etypecase content
+                   (string (cons header-type content)) ; :CO header
+                   (list (let* ((tags (remove-duplicates content :test #'equal))
+                                (clashes (find-duplicate-header-tags tags))
+                                (record (cons header-type tags)))
+                           (when clashes
+                             (error 'malformed-record-error :record record
+                                    :format-control "clashing tags ~a"
+                                    :format-arguments (list clashes)))
+                           record)))))))
 
 (defun name-sorted-p (sam-header)
   "Returns T if parsed SAM-HEADER indicates that the file is sorted by

@@ -37,6 +37,10 @@
   (ensure-condition malformed-record-error
     (make-header-record "@INVALID-TYPE	SN:AL096846")))
 
+(addtest (cl-sam-tests) make-header-record/3
+  (ensure (equalp '(:co . "Test comment.")
+                  (make-header-record "@CO	Test comment."))))
+
 (addtest (cl-sam-tests) ensure-mandatory-header-tags/1
   (ensure (ensure-mandatory-header-tags '(:hd (:vn . "1.0"))))
   (ensure (ensure-mandatory-header-tags '(:sq (:sn . "foo") (:ln . 100))))
@@ -109,6 +113,12 @@
   (ensure (equalp '((:HD (:VN . "1.0") (:SO . :coordinate)))
                   (make-sam-header
                    "@HD	VN:1.0	SO:coordinate	SO:coordinate"))))
+
+(addtest (cl-sam-tests) make-sam-header/4 ; Comment header
+  (ensure (equalp '((:HD (:VN . "1.0")) (:CO . "Test comment."))
+                  (make-sam-header
+                   "@HD	VN:1.0
+@CO	Test comment."))))
 
 (addtest (cl-sam-tests) subst-sort-order/1
   (ensure (equalp (canonical-header '((:HD (:VN . "1.0") (:SO . :coordinate))))
