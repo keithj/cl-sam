@@ -21,6 +21,9 @@
 
 (defconstant +max-num-bins+ (/ (1- (ash 1 18)) 7)
   "The maximum number of bins possible in the BAM indexing scheme.")
+(defconstant +samtools-kludge-bin+ 37450
+  "Extra bin with different semantics added by samtools.")
+
 (defconstant +linear-bin-size+ (expt 2 14)
   "The size in bases of intervals in the linear bin index.")
 
@@ -38,6 +41,20 @@ vector of bins (the binning index) and a vector of intervals (the
 linear index). The bins are sorted by increasing bin number."
   (bins (make-array 0) :type simple-vector)
   (intervals (make-array 0) :type simple-vector))
+
+(defstruct (samtools-ref-index (:include ref-index))
+  "A samtools specific reference index containing extra,
+undocumented data:
+
+ - start: the start offset of the reference
+ - end: the end offset of the reference
+ - mapped: number of reads mapped to the reference
+ - unmapped: number of unmapped read assigned to the reference by
+   magic"
+  (start 0 :type (unsigned-byte 64))
+  (end 0 :type (unsigned-byte 64))
+  (mapped 0 :type (unsigned-byte 64))
+  (unmapped 0 :type (unsigned-byte 64)))
 
 (defstruct (bin (:print-object print-bin))
   "A bin within a BAM binning index. A bin is a region on a reference

@@ -19,6 +19,33 @@
 
 (in-package :sam)
 
+;;;
+;;; Implementation notes:
+;;;
+;;; The binning index
+;;;
+;;; The largest bin number for a standard index should be
+;;; 37449. However, samtools creates an undocumented extra bin 37450
+;;; for each reference containing two chunks which are not really
+;;; chunks, but a data kludge where the start and end fields have the
+;;; meaning described in the SAM spec:
+;;;
+;;; First chunk:
+;;; "start" field contains the file offset of the start of the reference.
+;;;   "end" field contains the file offset of the end of the reference.
+;;;
+;;; Second chunk:
+;;;  "start" field contains the number of mapped reads on the reference
+;;;   "end" field contains the number of unmapped reads on the reference
+;;;
+;;; Sometimes unmapped reads are assigned a reference and mapping
+;;; position for sorting purposes. Also note that the extra bin IS NOT
+;;; ALWAYS PRESENT.
+;;;
+;;; In addition, there are 8 bytes appended to the end of the index
+;;; containing the number of unmapped reads that have no reference
+;;; and (or?) no coordinates. Your guess is as good as mine.
+
 (defun read-index-magic (stream)
   "Reads the BAI magic number from STREAM and returns T if it is valid
 or raises a {define-condition malformed-file-error} if not."
@@ -51,7 +78,25 @@ or raises a {define-condition malformed-file-error} if not."
              (bins (read-binning-index num-bins stream))
              (num-intervals (read-index-size))
              (intervals (read-linear-index num-intervals stream)))
-        (make-ref-index :bins bins :intervals intervals)))))
+        (if (zerop num-bins)
+            (make-ref-index :bins bins :intervals intervals)
+            (let ((last-bin (svref bins (1- num-bins)))) ; kludge
+              (cond ((= +samtools-kludge-bin+ (bin-num last-bin))
+                     (let ((x (svref (bin-chunks last-bin) 0))
+                           (y (svref (bin-chunks last-bin) 1)))
+                       (make-samtools-ref-index :bins (subseq bins 0
+                                                              (1- num-bins))
+                                                :intervals intervals
+                                                :start (chunk-start x)
+                                                :end (chunk-end x)
+                                                :mapped (chunk-start y)
+                                                :unmapped (chunk-end y))))
+                    ((> (bin-num last-bin) +max-num-bins+)
+                     (error 'malformed-record-error
+                            :record last-bin
+                            :format-control "bin number out of range"))
+                    (t
+                     (make-ref-index :bins bins :intervals intervals)))))))))
 
 (defun read-binning-index (num-bins stream)
   "Reads NUM-BINS bins from STREAM, returning a vector of bins, sorted
@@ -80,16 +125,12 @@ by increasing bin number."
                  (make-chunk :start start :end end))))
       (let* ((bin-num (read-bin-num))
              (num-chunks (read-num-chunks)))
-        (let ((bin
-               (make-bin :num bin-num
-                         :chunks (loop
-                                    with chunks = (make-array num-chunks)
-                                    for i from 0 below num-chunks
-                                    do (setf (svref chunks i) (read-chunk))
-                                    finally (return chunks)))))
-                  (when (= 37450 bin-num)
-                    (warn "bin out of range ~a" bin))
-                  bin)))))
+        (make-bin :num bin-num
+                  :chunks (loop
+                             with chunks = (make-array num-chunks)
+                             for i from 0 below num-chunks
+                             do (setf (svref chunks i) (read-chunk))
+                             finally (return chunks)))))))
 
 (defun read-linear-index (num-intervals stream)
   "Reads NUM-INTERVALS linear bin intervals from STREAM, returning
