@@ -63,16 +63,16 @@ of length REF-LENGTH bases, to handle BGZF."
     (encode-int32le ref-length buffer ref-len-offset)
     (write-bytes bgzf buffer buffer-len)))
 
+(declaim (ftype (function (bgzf simple-octet-vector) fixnum) write-alignment))
 (defun write-alignment (bgzf alignment-record)
   "Writes one ALIGNMENT-RECORD to handle BGZF and returns the number
 of bytes written."
   (declare (optimize (speed 3)))
-  (declare (type simple-octet-vector alignment-record))
   (let ((alen (length alignment-record))
         (alen-bytes (make-array 4 :element-type 'octet :initial-element 0)))
     (encode-int32le alen alen-bytes)
-    (the fixnum (+ (write-bytes bgzf alen-bytes 4)
-                   (write-bytes bgzf alignment-record alen)))))
+    (+ (write-bytes bgzf alen-bytes 4)
+       (write-bytes bgzf alignment-record alen))))
 
 (defun write-bam-meta (bgzf header num-refs ref-meta &key (compress t)
                        (null-padding 0))
