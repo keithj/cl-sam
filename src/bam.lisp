@@ -23,6 +23,8 @@
   "The size of a BAM auxilliary tag in bytes.")
 (defconstant +null-byte+ #x00
   "The termination byte for BAM strings.")
+(defconstant +unknown-quality+ #xff
+  "The value for unnavailable quality scores.")
 
 (defvar *bam-magic* (make-array 4 :element-type 'octet
                                 :initial-contents '(66 65 77 1))
@@ -164,6 +166,7 @@ Optional:
 
 ;;; Various user tag extensions
 ;;; cl-sam
+(define-alignment-tag :za :string "cl-sam: annotation")
 (define-alignment-tag :zf :int32 "cl-sam: original flag before correction")
 
 ;;; BWA
@@ -225,48 +228,49 @@ The tags must have been defined with {defmacro define-alignment-tag} .
 Returns:
 
 - A vector of '(unsigned-byte 8)."
-  (check-arguments (if quality-str
-                       (= (length seq-str) (length quality-str))
-                       t)
-                   (seq-str quality-str)
-                   "read sequence and quality strings were not the same length")
-  (let* ((i 32)
-         (j (+ i (1+ (length read-name))))
-         (k (+ j (if (null cigar)
-                     4
-                     (* 4 (length cigar)))))
-         (m (+ k (ceiling (length seq-str) 2)))
-         (n (+ m (if (null quality-str)
-                     1
-                     (length quality-str))))
-         (sizes (loop
-                   for (nil . value) in tag-values
-                   collect (alignment-tag-bytes value)))
-         (aln (make-array (+ n (apply #'+ sizes)) :element-type 'octet
-                          :initial-element 0)))
-    (encode-int32le reference-id aln 0)
-    (encode-int32le alignment-pos aln 4)
-    (encode-int8le (1+ (length read-name)) aln 8)
-    (encode-int8le mapping-quality aln 9)
-    (encode-int16le alignment-bin aln 10)
-    (encode-int16le (length cigar) aln 12)
-    (encode-int16le alignment-flag aln 14)
-    (encode-int16le (length seq-str) aln 16)
-    (encode-int32le mate-reference-id aln 20)
-    (encode-int32le mate-alignment-pos aln 24)
-    (encode-int32le insert-length aln 28)
-    (encode-read-name read-name aln i)
-    (encode-cigar cigar aln j)
-    (encode-seq-string seq-str aln k)
-    (encode-quality-string quality-str aln m)
-    (loop
-       for (tag . value) in tag-values
-       for size in sizes
-       with offset = n
-       do (progn
-            (encode-alignment-tag value tag aln offset)
-            (incf offset size))
-       finally (return aln))))
+  (let ((slen (length seq-str))
+        (qlen (length quality-str)))
+    (check-arguments (or (null quality-str) (= slen qlen))
+                     (seq-str quality-str)
+                     (txt "read sequence and quality strings were not"
+                          "the same length"))
+    (let* ((i 32)
+           (j (+ i (1+ (length read-name))))
+           (k (+ j (* 4 (length cigar))))
+           (m (+ k (ceiling slen 2)))
+           (n (+ m (if (null quality-str)
+                       slen
+                       qlen)))
+           (sizes (loop
+                     for (nil . value) in tag-values
+                     collect (alignment-tag-bytes value)))
+           (aln (make-array (+ n (apply #'+ sizes)) :element-type 'octet
+                            :initial-element 0)))
+      (encode-int32le reference-id aln 0)
+      (encode-int32le alignment-pos aln 4)
+      (encode-int8le (1+ (length read-name)) aln 8)
+      (encode-int8le mapping-quality aln 9)
+      (encode-int16le alignment-bin aln 10)
+      (encode-int16le (length cigar) aln 12)
+      (encode-int16le alignment-flag aln 14)
+      (encode-int16le slen aln 16)
+      (encode-int32le mate-reference-id aln 20)
+      (encode-int32le mate-alignment-pos aln 24)
+      (encode-int32le insert-length aln 28)
+      (encode-read-name read-name aln i)
+      (encode-cigar cigar aln j)
+      (encode-seq-string seq-str aln k)
+      (if (null quality-str)
+          (encode-unknown-quality slen aln m)
+          (encode-quality-string quality-str aln m))
+      (loop
+         for (tag . value) in tag-values
+         for size in sizes
+         with offset = n
+         do (progn
+              (encode-alignment-tag value tag aln offset)
+              (incf offset size))
+         finally (return aln)))))
 
 (defun copy-alignment-record (aln &key alignment-flag
                               (reference-id (reference-id aln))
@@ -321,6 +325,7 @@ Returns:
     (dolist (name bit-names (ensure-valid-flag f))
       (destructuring-bind (bit value)
           (ecase name
+            (:not-sequenced-pair      '( 0 0))
             (:sequenced-pair          '( 0 1))
             (:not-mapped-proper-pair  '( 1 0))
             (:mapped-proper-pair      '( 1 1))
@@ -343,17 +348,17 @@ Returns:
 (declaim (ftype (function (simple-octet-vector) (signed-byte 32))
                 reference-id))
 (defun reference-id (aln)
-  "Returns the reference sequence identifier of ALIGNMENT-RECORD. This
-is an integer locally assigned to a reference sequence within the
-context of a BAM file."
+  "Returns the reference sequence identifier of ALN. This is an
+integer locally assigned to a reference sequence within the context of
+a BAM file."
   (declare (optimize (speed 3)))
   (decode-int32le aln 0))
 
 (declaim (ftype (function (simple-octet-vector) (signed-byte 32))
                 alignment-position))
 (defun alignment-position (aln)
-  "Returns the 0-based sequence coordinate of ALIGNMENT-RECORD in the
-reference sequence of the first base of the clipped read."
+  "Returns the 0-based sequence coordinate of ALN in the reference
+sequence of the first base of the clipped read."
   (declare (optimize (speed 3)))
   (decode-int32le aln 4))
 
@@ -372,20 +377,20 @@ reference sequence of the first base of the clipped read."
 (declaim (inline read-name-length))
 (defun read-name-length (aln)
   "Returns the length in ASCII characters of the read name of
-ALIGNMENT-RECORD."
+ALN."
   (decode-uint8le aln 8))
 
 (defun mapping-quality (aln)
-  "Returns the integer mapping quality of ALIGNMENT-RECORD."
+  "Returns the integer mapping quality of ALN."
   (decode-uint8le aln 9))
 
 (defun alignment-bin (aln)
   "Returns an integer that indicates the alignment bin to which
-ALIGNMENT-RECORD has been assigned."
+ALN has been assigned."
   (decode-uint16le aln 10))
 
 (defun cigar-length (aln)
-  "Returns the number of CIGAR operations in ALIGNMENT-RECORD."
+  "Returns the number of CIGAR operations in ALN."
   (decode-uint16le aln 12))
 
 (declaim (ftype (function ((simple-octet-vector) &key (:validate t))
@@ -393,8 +398,8 @@ ALIGNMENT-RECORD has been assigned."
                 alignment-flag))
 (defun alignment-flag (aln &key validate)
   "Returns an integer whose bits are flags that describe properties of
-the ALIGNMENT-RECORD. If the VALIDATE key is T (the default) the
-flag's bits are checked for internal consistency."
+the ALN. If the VALIDATE key is T (the default) the flag's bits are
+checked for internal consistency."
   (let ((flag (decode-uint16le aln 14)))
     (when validate
       (ensure-valid-flag flag aln))
@@ -514,40 +519,39 @@ consistent."
                   (second-in-pair-p flag))))))
 
 (defun read-length (aln)
-  "Returns the length of the read described by ALIGNMENT-RECORD."
+  "Returns the length of the read described by ALN."
   (decode-int32le aln 16))
 
 (defun mate-reference-id (aln)
-  "Returns the integer reference ID of ALIGNMENT-RECORD."
+  "Returns the integer reference ID of ALN."
   (declare (optimize (speed 3)))
   (decode-int32le aln 20))
 
 (defun mate-alignment-position (aln)
   "Returns the 0-based sequence position of the read mate's alignment
-described by ALIGNMENT-RECORD."
+described by ALN."
   (decode-int32le aln 24))
 
 (defun insert-length (aln)
-  "Returns the insert length described by ALIGNMENT-RECORD."
+  "Returns the insert length described by ALN."
   (decode-int32le aln 28))
 
 (defun read-name (aln)
-  "Returns the read name string described by ALIGNMENT-RECORD."
+  "Returns the read name string described by ALN."
   (decode-read-name aln 32
                     (read-name-length aln)))
 
 (defun alignment-cigar (aln)
   "Returns the CIGAR record list of the alignment described by
-ALIGNMENT-RECORD. CIGAR operations are given as a list, each member
-being a list of a CIGAR operation keyword and an integer operation
-length."
+ALN. CIGAR operations are given as a list, each member being a list of
+a CIGAR operation keyword and an integer operation length."
   (let* ((name-len (read-name-length aln))
          (cigar-index (+ 32 name-len))
          (cigar-bytes (* 4 (cigar-length aln))))
     (decode-cigar aln cigar-index cigar-bytes)))
 
 (defun seq-string (aln)
-  "Returns the sequence string described by ALIGNMENT-RECORD."
+  "Returns the sequence string described by ALN."
   (multiple-value-bind (read-len cigar-index cigar-bytes seq-index
                         qual-index tag-index)
       (alignment-indices aln)
@@ -555,7 +559,7 @@ length."
     (decode-seq-string aln seq-index read-len)))
 
 (defun quality-string (aln)
-  "Returns the sequence quality string described by ALIGNMENT-RECORD."
+  "Returns the sequence quality string described by ALN."
   (multiple-value-bind (read-len cigar-index cigar-bytes seq-index
                         qual-index tag-index)
       (alignment-indices aln)
@@ -563,7 +567,7 @@ length."
     (decode-quality-string aln qual-index read-len)))
 
 (defun alignment-tag-values (aln)
-  "Returns an alist of tag and values described by ALIGNMENT-RECORD."
+  "Returns an alist of tag and values described by ALN."
   (multiple-value-bind (read-len cigar-index cigar-bytes seq-index
                         qual-index tag-index)
       (alignment-indices aln)
@@ -571,11 +575,10 @@ length."
     (decode-tag-values aln tag-index)))
 
 (defun alignment-core (aln &key validate)
-  "Returns a list of the core data described by ALIGNMENT-RECORD. The
-list elements are comprised of reference-id, alignment-position,
-read-name length, mapping-quality alignment-bin, cigar length,
-alignment flag, read length, mate reference-id, mate
-alignment-position and insert length."
+  "Returns a list of the core data described by ALN. The list elements
+are comprised of reference-id, alignment-position, read-name length,
+mapping-quality alignment-bin, cigar length, alignment flag, read
+length, mate reference-id, mate alignment-position and insert length."
   (list (reference-id aln)
         (alignment-position aln)
         (read-name-length aln)
@@ -598,8 +601,8 @@ alist."
            (alignment-core aln :validate validate)))
 
 (defun alignment-flag-alist (aln &key validate)
-  "Returns the bitwise flags of ALIGNMENT-RECORD in the form of an
-alist. The primary purpose of this function is debugging."
+  "Returns the bitwise flags of ALN in the form of an alist. The
+primary purpose of this function is debugging."
   (let ((flag (alignment-flag aln :validate validate)))
     (pairlis '(:sequenced-pair :mapped-proper-pair :query-unmapped
                :mate-unmapped :query-forward :mate-forward :first-in-pair
@@ -618,9 +621,8 @@ alist. The primary purpose of this function is debugging."
                    (pcr/optical-duplicate-p flag)))))
 
 (defun alignment-indices (aln)
-  "Returns 7 integer values which are byte-offsets within
-ALIGNMENT-RECORD at which the various core data lie. See the SAM
-spec."
+  "Returns 7 integer values which are byte-offsets within ALN at which
+the various core data lie. See the SAM spec."
   (let* ((read-len (read-length aln))
          (name-len (read-name-length aln))
          (cigar-index (+ 32 name-len))
@@ -633,14 +635,13 @@ spec."
 
 (defun decode-read-name (aln index num-bytes)
   "Returns a string containing the template/read name of length
-NUM-BYTES, encoded at byte INDEX in ALIGNMENT-RECORD."
+NUM-BYTES, encoded at byte INDEX in ALN."
   ;; The read name is null terminated and the terminator is included
   ;; in the name length
   (make-sb-string aln index (- (+ index num-bytes) 2)))
 
 (defun encode-read-name (read-name aln index)
-  "Returns ALIGNMENT-RECORD having encoded READ-NAME into it, starting
-at INDEX."
+  "Returns ALN having encoded READ-NAME into it, starting at INDEX."
   (loop
      for i from 0 below (length read-name)
      for j = index then (1+ j)
@@ -650,7 +651,7 @@ at INDEX."
 
 (defun decode-seq-string (aln index num-bytes)
   "Returns a string containing the alignment query sequence of length
-NUM-BYTES. The sequence must be present in ALIGNMENT-RECORD at INDEX."
+NUM-BYTES. The sequence must be present in ALN at INDEX."
   (declare (optimize (speed 3)))
   (declare (type simple-octet-vector aln)
            (type (unsigned-byte 32) index num-bytes))
@@ -674,8 +675,7 @@ NUM-BYTES. The sequence must be present in ALIGNMENT-RECORD at INDEX."
        finally (return seq))))
 
 (defun encode-seq-string (str aln index)
-  "Returns ALIGNMENT-RECORD having encoded STR into it, starting at
-INDEX."
+  "Returns ALN having encoded STR into it, starting at INDEX."
   (flet ((encode-base (char)
            (ecase (char-upcase char)
              (#\= 0)
@@ -695,39 +695,44 @@ INDEX."
 
 (defun decode-quality-string (aln index num-bytes)
   "Returns a string containing the alignment query sequence of length
-NUM-BYTES. The sequence must be present in ALIGNMENT-RECORD at
-INDEX. The SAM spec states that quality data are optional, with
-absence indicated by 0xff. If the first byte of quality data is 0xff,
-NIL is returned."
+NUM-BYTES. The sequence must be present in ALN at INDEX. The SAM spec
+states that quality data are optional, with absence indicated by
+0xff. If the first byte of quality data is 0xff, NIL is returned."
   (flet ((encode-phred (x)
            (code-char (+ 33 (min 93 x)))))
-    (if (= #xff (aref aln index))
+    (if (= +unknown-quality+ (aref aln index))
         nil
-      (loop
-         with str = (make-array num-bytes :element-type 'base-char
-                                :initial-element #\Nul)
-         for i from 0 below num-bytes
-         for j from index below (+ index num-bytes)
-         do (setf (char str i)
-                  (encode-phred (decode-uint8le aln j)))
-         finally (return str)))))
+        (loop
+           with str = (make-array num-bytes :element-type 'base-char
+                                  :initial-element #\Nul)
+           for i from 0 below num-bytes
+           for j from index below (+ index num-bytes)
+           do (setf (char str i)
+                    (encode-phred (decode-uint8le aln j)))
+           finally (return str)))))
 
 (defun encode-quality-string (str aln index)
-  "Returns ALIGNMENT-RECORD having encoded READ-NAME into it, starting
-at INDEX."
+  "Returns ALN having encoded quality string STR into it, starting at
+INDEX."
   (flet ((decode-phred (x)
            (- (char-code x) 33)))
-    (if (null str)
-        (setf (aref aln index) #xff)
-      (loop
-         for i from 0 below (length str)
-         for j = (+ index i)
-         do (encode-int8le (decode-phred (char str i)) aln j))))
+    (loop
+       for i from 0 below (length str)
+       for j = (+ index i)
+       do (encode-int8le (decode-phred (char str i)) aln j)))
+  aln)
+
+(defun encode-unknown-quality (n aln index)
+  "Returns ALN having encoded N unknown qualities into it, starting at
+INDEX."
+  (loop
+     for i from index below (+ index n)
+     do (setf (aref aln i) +unknown-quality+))
   aln)
 
 (defun decode-cigar (aln index num-bytes)
   "Returns an alist of CIGAR operations from NUM-BYTES bytes within
-ALIGNMENT-RECORD, starting at INDEX."
+ALN, starting at INDEX."
   (flet ((decode-len (uint32)
            (ash uint32 -4))
          (decode-op (uint32)
@@ -745,8 +750,7 @@ ALIGNMENT-RECORD, starting at INDEX."
                  (cons (decode-op x) (decode-len x))))))
 
 (defun encode-cigar (cigar aln index)
-  "Returns ALIGNMENT-RECORD having encoded alist CIGAR into it,
-starting at INDEX."
+  "Returns ALN having encoded alist CIGAR into it, starting at INDEX."
   (flet ((encode-op-len (op len)
            (let ((uint32 (ash len 4)))
              (setf (ldb (byte 4 0) uint32) (ecase op
@@ -762,11 +766,11 @@ starting at INDEX."
        for (op . length) in cigar
        for i = index then (+ 4 i)
        do (encode-int32le (encode-op-len op length) aln i)
-       finally (return aln))))
+           finally (return aln))))
 
 (defun decode-tag-values (aln index)
-  "Returns a list of auxilliary data from ALIGNMENT-RECORD at
-INDEX. The BAM two-letter data keys are transformed to Lisp keywords."
+  "Returns a list of auxilliary data from ALN at INDEX. The BAM
+two-letter data keys are transformed to Lisp keywords."
   (declare (optimize (speed 3) (safety 0)))
   (declare (type simple-octet-vector aln)
            (type vector-index index))
@@ -813,9 +817,9 @@ INDEX. The BAM two-letter data keys are transformed to Lisp keywords."
                  (cons tag val)))))
 
 (defun encode-int-tag (value aln index)
-  "Returns ALIGNMENT-RECORD having encoded integer VALUE into it,
-starting at INDEX. BAM format is permitted to use more compact integer
-storage where possible."
+  "Returns ALN having encoded integer VALUE into it, starting at
+INDEX. BAM format is permitted to use more compact integer storage
+where possible."
   (destructuring-bind (type-char encoder)
       (etypecase value
         ((integer 0 255)                  '(#\C encode-int8le))
@@ -828,26 +832,26 @@ storage where possible."
     (funcall encoder value aln (1+ index))))
 
 (defun encode-float-tag (value aln index)
-  "Returns ALIGNMENT-RECORD having encoded float VALUE into it,
+  "Returns ALN having encoded float VALUE into it,
 starting at INDEX."
   (setf (aref aln index) (char-code #\f))
   (encode-float32le value aln (1+ index)))
 
 (defun encode-char-tag (value aln index)
-  "Returns ALIGNMENT-RECORD having encoded character VALUE into it,
+  "Returns ALN having encoded character VALUE into it,
 starting at INDEX."
   (setf (aref aln index) (char-code #\A))
   (encode-int8le (char-code value) aln (1+ index)))
 
 (defun encode-hex-tag (value aln index)
-  "Returns ALIGNMENT-RECORD having encoded hex string VALUE into it,
+  "Returns ALN having encoded hex string VALUE into it,
 starting at INDEX."
   (when (parse-integer value :radix 16)
     (setf (aref aln index) (char-code #\H))
     (%encode-string-tag value aln (1+ index)) ))
 
 (defun encode-string-tag (value aln index)
-  "Returns ALIGNMENT-RECORD having encoded string VALUE into it,
+  "Returns ALN having encoded string VALUE into it,
 starting at INDEX."
   (setf (aref aln index) (char-code #\Z))
   (%encode-string-tag value aln (1+ index)))
@@ -942,7 +946,7 @@ starting at INDEX."
 
 (defun flag-validation-error (flag message &optional aln)
   "Raised a {define-condition malformed-field-error} for alignment
-FLAG in ALIGNMENT-RECORD, with MESSAGE."
+FLAG in ALN, with MESSAGE."
   (if aln
       (let ((reference-id (reference-id aln))
             (read-name (read-name aln))
