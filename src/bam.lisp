@@ -24,7 +24,7 @@
 (defconstant +null-byte+ #x00
   "The termination byte for BAM strings.")
 (defconstant +unknown-quality+ #xff
-  "The value for unnavailable quality scores.")
+  "The value for unavailable quality scores.")
 
 (defvar *bam-magic* (make-array 4 :element-type 'octet
                                 :initial-contents '(66 65 77 1))
