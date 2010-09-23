@@ -32,6 +32,15 @@
   (ensure (valid-sam-version-p "1.3"))
   (ensure (not (valid-sam-version-p "1.0.0"))))
 
+(addtest (cl-sam-tests) valid-reference-name-p/1
+  (ensure (valid-reference-name-p "x"))
+  (ensure (valid-reference-name-p "x*"))
+  (ensure (valid-reference-name-p "x="))
+  (ensure (not (valid-reference-name-p "")))
+  (ensure (not (valid-reference-name-p " ")))
+  (ensure (not (valid-reference-name-p "*")))
+  (ensure (not (valid-reference-name-p "="))))
+
 (addtest (cl-sam-tests) make-header-record/1
   (ensure (equalp '(:sq (:sn . "AL096846") (:ln . 6490)
                     (:sp . "Schizosaccharomyces pombe"))
@@ -46,10 +55,28 @@
   (ensure (equalp '(:co . "Test comment.")
                   (make-header-record "@CO	Test comment."))))
 
+(addtest (cl-sam-tests) make-header-record/4
+  (ensure-condition malformed-field-error
+    (make-header-record "@HD	VN:x"))
+  (ensure-condition malformed-field-error
+    (make-header-record "@HD	VN:10"))
+  (ensure-condition malformed-field-error
+    (make-header-record "@HD	VN:0..0")))
+
+(addtest (cl-sam-tests) make-header-record/5
+  (ensure-condition malformed-field-error
+    (make-header-record "@SQ	SN:"))
+  (ensure-condition malformed-field-error
+    (make-header-record "@SQ	SN:="))
+  (ensure-condition malformed-field-error
+    (make-header-record "@SQ	SN:*")))
+
 (addtest (cl-sam-tests) ensure-mandatory-header-tags/1
   (ensure (ensure-mandatory-header-tags '(:hd (:vn . "1.3"))))
   (ensure (ensure-mandatory-header-tags '(:sq (:sn . "foo") (:ln . 100))))
   (ensure (ensure-mandatory-header-tags '(:rg (:id . "foo") (:sm . "bar"))))
+  ;; :sm tag is no longer mandatory in SAM 1.3
+  (ensure (ensure-mandatory-header-tags '(:rg (:id . "foo"))))
   (ensure (ensure-mandatory-header-tags '(:pg (:id . "foo"))))
   ;; CO has no tags
   (ensure (ensure-mandatory-header-tags '(:co . "foo"))))
@@ -59,8 +86,6 @@
     (ensure-mandatory-header-tags '(:hd nil)))
   (ensure-condition malformed-record-error
     (ensure-mandatory-header-tags '(:sq (:sn . "foo"))))
-  (ensure-condition malformed-record-error
-    (ensure-mandatory-header-tags '(:rg (:id . "foo"))))
   (ensure-condition malformed-record-error
     (ensure-mandatory-header-tags '(:pg nil))))
 

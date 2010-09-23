@@ -25,7 +25,7 @@
 (defparameter *valid-header-types* '(:hd :sq :rg :pg :co)
   "A list of valid SAM header types.")
 (defparameter *mandatory-header-tags*
-  (pairlis *valid-header-types* '((:vn) (:sn :ln) (:id :sm) (:id) nil))
+  (pairlis *valid-header-types* '((:vn) (:sn :ln) (:id) (:id) nil))
   "A mapping that describes the mandatory tags for each SAM header
   record type.")
 (defparameter *valid-header-tags*
@@ -65,7 +65,10 @@ header HEADER-TYPE."
                       :format-arguments (list ,header-type tag))))))))
 
 (define-header-tag-parser parse-hd-tag ("HD" value)
-  (("VN" :vn)
+  (("VN" :vn (if (valid-sam-version-p value)
+                 value
+                 (error 'malformed-field-error :field value
+                        :format-control "invalid SAM version number")))
    ("SO" :so (cond ((string= "unsorted" value)
                     :unsorted)
                    ((string= "queryname" value)
@@ -86,7 +89,11 @@ header HEADER-TYPE."
                            :format-control "invalid GO value"))))))
 
 (define-header-tag-parser parse-sq-tag ("SQ" value)
-  (("SN" :sn) ("LN" :ln (parse-integer value))
+  (("SN" :sn (if (valid-reference-name-p value)
+                 value
+                 (error 'malformed-field-error :field value
+                        :format-control "invalid SN value")))
+   ("LN" :ln (parse-integer value))
    ("AS" :as) ("M5" :m5) ("SP" :sp) ("UR" :ur)))
 
 (define-header-tag-parser parse-rg-tag ("RG" value)
@@ -268,6 +275,21 @@ NIL otherwise."
     (and (= 2 (length parts))
          (every #'digit-char-p (first parts))
          (every #'digit-char-p (second parts)))))
+
+(defun valid-reference-name-p (str)
+  "Returns T if STR is a valid reference sequence name matching the
+regex [!-)+-<>-~][!-~]* , or NIL otherwise."
+  (labels ((name-char-p (c)             ; regex [!-)+-<>-~][!-~]*
+             (< 32 (char-code c) 127))
+           (start-char-p (c)
+             (and (name-char-p c)
+                  (not (member c '(#\* #\=))))))
+    (let ((len (length str)))
+      (and (plusp len)
+           (start-char-p (char str 0))
+           (loop
+              for i from 1 below len
+              always (name-char-p (char str i)))))))
 
 (defun hd-record (&key (version *sam-version*) (sort-order :unsorted)
                   (group-order :none))

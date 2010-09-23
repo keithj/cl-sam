@@ -137,6 +137,7 @@
    ;; Low-level SAM API
    #:*sam-version*
    #:valid-sam-version-p
+   #:valid-reference-name-p
    #:make-sam-header
    #:make-header-record
    #:header-type
