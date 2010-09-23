@@ -35,11 +35,6 @@
   (make-array 4 :element-type 'base-char
               :initial-contents '(#\Space #\Tab #\Linefeed #\Return)))
 
-(declaim (type simple-base-string *invalid-reference-name-chars*))
-(defvar *invalid-reference-name-chars*
-  (make-array 6 :element-type 'base-char
-              :initial-contents '(#\Space #\Tab #\Return #\Linefeed #\@ #\=)))
-
 (defgeneric encode-alignment-tag (value tag vector index)
   (:documentation "Performs binary encoding of VALUE into VECTOR under
   TAG at INDEX, returning VECTOR."))
@@ -881,13 +876,12 @@ starting at INDEX."
     ((integer 0 4294967295) 7)))
 
 (defun ensure-valid-reference-name (str)
+  "Returns STR if it is a valid reference sequence name, or raises a
+{define-condition malformed-field-error} if not."
   (declare (optimize (speed 3)))
-  (declare (type simple-string str))
-  (loop
-     for c across str
-     do (check-field (not (find c *invalid-reference-name-chars* :test #'char=))
-                     nil str "invalid character ~c in reference name" c)
-     finally (return str)))
+  (and (check-field (valid-reference-name-p str) nil str
+                    "invalid reference name")
+       str))
 
 (defun ensure-valid-read-name (str)
   (declare (optimize (speed 3)))
