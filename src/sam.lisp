@@ -19,7 +19,7 @@
 
 (in-package :sam)
 
-(defparameter *sam-version* "0.1.2-draft (20090820)"
+(defparameter *sam-version* "1.3"
   "The SAM version written by cl-sam.")
 
 (defparameter *valid-header-types* '(:hd :sq :rg :pg :co)
@@ -29,17 +29,18 @@
   "A mapping that describes the mandatory tags for each SAM header
   record type.")
 (defparameter *valid-header-tags*
-  (pairlis *valid-header-types* '((:vn :so :go)
-                                  (:sn :ln :as :m5 :ur :sp)
-                                  (:id :sm :lb :ds :pu :pi :cn :dt :pl)
-                                  (:id :vn :cl)
+  (pairlis *valid-header-types* '((:vn :so)
+                                  (:sn :ln :as :m5 :sp :ur)
+                                  (:id :cn :ds :dt :lb :pi :pl :pu :sm)
+                                  (:id :cl :pn :pp :vn)
                                   nil))
   "A mapping that describes the valid tags for each SAM header record
   type.")
 (defparameter *valid-sort-orders* '(:unsorted :coordinate :queryname)
   "Valid values for SAM sort order tags.")
 (defparameter *valid-group-orders* '(:none :query :reference)
-  "Valid values for SAM group order tags.")
+  "Valid values for SAM group order tags. Group order is no longer a
+valid tag in SAM version 1.3.")
 
 (defmacro define-header-tag-parser (name (header-type var) tag-specs)
   "Defines a tag parsing function NAME that parses tag values for SAM
@@ -86,14 +87,14 @@ header HEADER-TYPE."
 
 (define-header-tag-parser parse-sq-tag ("SQ" value)
   (("SN" :sn) ("LN" :ln (parse-integer value))
-   ("AS" :as) ("M5" :m5) ("UR" :ur) ("SP" :sp)))
+   ("AS" :as) ("M5" :m5) ("SP" :sp) ("UR" :ur)))
 
 (define-header-tag-parser parse-rg-tag ("RG" value)
-  (("ID" :id) ("SM" :sm) ("LB" :lb) ("DS" :ds) ("PU" :pu) ("PI" :pi)
-   ("CN" :cn) ("DT" :dt) ("PL" :pl)))
+  (("ID" :id) ("CN" :cn) ("DS" :ds)  ("DT" :dt) ("LB" :lb) ("PI" :pi)
+   ("PL" :pl) ("PU" :pu) ("SM" :sm)))
 
 (define-header-tag-parser parse-pg-tag ("PG" value)
-  (("ID" :id) ("VN" :vn) ("CL" :cl)))
+  (("ID" :id) ("CL" :cl) ("PN" :pn) ("PP" :pp) ("VN" :vn)))
 
 (defun make-header-record (str)
   "Parses a single SAM header record STR and returns a list. May
@@ -260,8 +261,17 @@ coordinate, or NIL otherwise."
   (check-arguments (listp sam-header) (sam-header) "expected a parsed header")
   (eql :coordinate (assocdr :so (header-tags (assoc :hd sam-header)))))
 
+(defun valid-sam-version-p (str)
+  "Returns T if SAM version string STR matches /^[0-9]+.[0-9]$/, or
+NIL otherwise."
+  (let ((parts (string-split str #\.)))
+    (and (= 2 (length parts))
+         (every #'digit-char-p (first parts))
+         (every #'digit-char-p (second parts)))))
+
 (defun hd-record (&key (version *sam-version*) (sort-order :unsorted)
                   (group-order :none))
+  "Returns a new HD record."
   (assert (stringp version) (version)
           "VERSION should be a string, but was ~a" version)
   (cons :hd (reverse (pairlis (valid-header-tags :hd)
@@ -269,6 +279,7 @@ coordinate, or NIL otherwise."
 
 (defun sq-record (seq-name seq-length &key assembly-identity seq-md5 seq-uri
                   seq-species)
+  "Returns a new SQ record."
   (assert (stringp seq-name)
           (seq-name)
           "SEQ-NAME should be a string, but was ~a" seq-name)
@@ -286,25 +297,26 @@ coordinate, or NIL otherwise."
 (defun rg-record (identity sample &key library description
                   (platform-unit :lane) insert-size
                   sequencing-centre sequencing-date platform-tech)
-    (assert (stringp identity)
-            (identity)
-            "IDENTITY should be a string, but was ~a" identity)
-    (assert (stringp sample)
-            (sample)
-            "SAMPLE should be a string, but was ~a" sample)
-    (assert (and (integerp insert-size) (plusp insert-size))
-            (insert-size)
-            "INSERT-SIZE should be a positive integer, but was ~a" insert-size)
-    (cons :rg
-          (remove-if #'null
-                       (mapcar (lambda (key value)
-                                 (when value
-                                   (cons key value)))
-                               (valid-header-tags :rg)
-                               (list identity sample library description
-                                     platform-unit insert-size
-                                     sequencing-centre sequencing-date
-                                     platform-tech)))))
+  "Returns a new RG record."
+  (assert (stringp identity)
+          (identity)
+          "IDENTITY should be a string, but was ~a" identity)
+  (assert (stringp sample)
+          (sample)
+          "SAMPLE should be a string, but was ~a" sample)
+  (assert (and (integerp insert-size) (plusp insert-size))
+          (insert-size)
+          "INSERT-SIZE should be a positive integer, but was ~a" insert-size)
+  (cons :rg
+        (remove-if #'null
+                   (mapcar (lambda (key value)
+                             (when value
+                               (cons key value)))
+                           (valid-header-tags :rg)
+                           (list identity sample library description
+                                 platform-unit insert-size
+                                 sequencing-centre sequencing-date
+                                 platform-tech)))))
 
 (defun merge-sam-headers (&rest headers)
   "Returns a new SAM header that is the result of merging

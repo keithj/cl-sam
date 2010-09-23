@@ -27,6 +27,11 @@
                                (symbol-name (first x))))))
           (copy-tree header)))
 
+(addtest (cl-sam-tests) valid-sam-version-p/1
+  (ensure (valid-sam-version-p "1.0"))
+  (ensure (valid-sam-version-p "1.3"))
+  (ensure (not (valid-sam-version-p "1.0.0"))))
+
 (addtest (cl-sam-tests) make-header-record/1
   (ensure (equalp '(:sq (:sn . "AL096846") (:ln . 6490)
                     (:sp . "Schizosaccharomyces pombe"))
@@ -42,7 +47,7 @@
                   (make-header-record "@CO	Test comment."))))
 
 (addtest (cl-sam-tests) ensure-mandatory-header-tags/1
-  (ensure (ensure-mandatory-header-tags '(:hd (:vn . "1.0"))))
+  (ensure (ensure-mandatory-header-tags '(:hd (:vn . "1.3"))))
   (ensure (ensure-mandatory-header-tags '(:sq (:sn . "foo") (:ln . 100))))
   (ensure (ensure-mandatory-header-tags '(:rg (:id . "foo") (:sm . "bar"))))
   (ensure (ensure-mandatory-header-tags '(:pg (:id . "foo"))))
@@ -60,7 +65,7 @@
     (ensure-mandatory-header-tags '(:pg nil))))
 
 (addtest (cl-sam-tests) ensure-valid-header-tags/1
-  (ensure (ensure-mandatory-header-tags '(:hd (:vn . "1.0")))))
+  (ensure (ensure-mandatory-header-tags '(:hd (:vn . "1.3")))))
 
 (addtest (cl-sam-tests) ensure-valid-header-tags/2
   (ensure-condition malformed-record-error
@@ -71,7 +76,7 @@
   (ensure-valid-header-tags '(:co . "foo")))
 
 (addtest (cl-sam-tests) merge-sam-headers/1
-  (let ((header '((:hd (:vn . "1.0"))
+  (let ((header '((:hd (:vn . "1.3"))
                   (:sq (:sn . "AL096846") (:ln . 6490)
                    (:sp . "Schizosaccharomyces pombe"))
                   (:pg (:id . "bwa") (:vn . "0.4.6")))))
@@ -79,17 +84,17 @@
     (ensure (equalp (canonical-header header)
                     (canonical-header
                      (merge-sam-headers
-                      '((:hd (:vn . "1.0"))
+                      '((:hd (:vn . "1.3"))
                         (:sq (:sn . "AL096846") (:ln . 6490)))
-                      '((:hd (:vn . "1.0"))
+                      '((:hd (:vn . "1.3"))
                         (:sq (:sn . "AL096846") (:ln . 6490)
                          (:sp . "Schizosaccharomyces pombe"))
                         (:pg (:id . "bwa") (:vn . "0.4.6")))))))))
 
 (addtest (cl-sam-tests) merge-sam-headers/2
-  (let ((header1 '((:hd (:vn . "1.0"))
+  (let ((header1 '((:hd (:vn . "1.3"))
                    (:sq (:sn . "AL096846") (:ln . 6490))))
-        (header2 '((:hd (:vn . "1.0"))
+        (header2 '((:hd (:vn . "1.3"))
                    (:sq (:sn . "AL096846") (:ln . 9999)
                     (:sp . "Schizosaccharomyces pombe"))
                    (:pg (:id . "bwa") (:vn . "0.4.6")))))
@@ -97,10 +102,10 @@
       (merge-sam-headers header1 header2))))
 
 (addtest (cl-sam-tests) make-sam-header/1
-  (let ((expected '((:hd (:vn . "1.0"))
+  (let ((expected '((:hd (:vn . "1.3"))
                     (:sq (:sn . "AL096846") (:ln . 6490)
                      (:sp . "Schizosaccharomyces pombe"))))
-        (result (make-sam-header "@HD	VN:1.0
+        (result (make-sam-header "@HD	VN:1.3
 @SQ	SN:AL096846	LN:6490	SP:Schizosaccharomyces pombe")))
     (ensure (equalp (canonical-header expected)
                     (canonical-header result)))))
@@ -110,38 +115,45 @@
     (make-sam-header "@SQ	SN:AL096846	LN:6490	LN:9999"))) 
 
 (addtest (cl-sam-tests) make-sam-header/3 ; duplicates
-  (ensure (equalp '((:HD (:VN . "1.0") (:SO . :coordinate)))
+  (ensure (equalp '((:HD (:VN . "1.3") (:SO . :coordinate)))
                   (make-sam-header
-                   "@HD	VN:1.0	SO:coordinate	SO:coordinate"))))
+                   "@HD	VN:1.3	SO:coordinate	SO:coordinate"))))
 
 (addtest (cl-sam-tests) make-sam-header/4 ; Comment header
-  (ensure (equalp '((:HD (:VN . "1.0")) (:CO . "Test comment."))
+  (ensure (equalp '((:HD (:VN . "1.3")) (:CO . "Test comment."))
                   (make-sam-header
-                   "@HD	VN:1.0
+                   "@HD	VN:1.3
 @CO	Test comment."))))
 
+(addtest (cl-sam-tests) make-sam-header/5 ; group order
+  (ensure-condition malformed-record-error
+    (make-sam-header
+     "@HD	VN:1.3	SO:coordinate	GO:none")))
+
 (addtest (cl-sam-tests) subst-sort-order/1
-  (ensure (equalp (canonical-header '((:HD (:VN . "1.0") (:SO . :coordinate))))
+  (ensure (equalp (canonical-header '((:HD (:VN . "1.3") (:SO . :coordinate))))
                   (canonical-header
-                   (subst-sort-order (make-sam-header "@HD	VN:1.0")
+                   (subst-sort-order (make-sam-header "@HD	VN:1.3")
                                      :coordinate)))))
 
 (addtest (cl-sam-tests) subst-sort-order/2
   (ensure (equalp
-           (canonical-header '((:HD (:VN . "1.0") (:SO . :coordinate))))
+           (canonical-header '((:HD (:VN . "1.3") (:SO . :coordinate))))
            (canonical-header (subst-sort-order
-                              (make-sam-header "@HD	VN:1.0	SO:unsorted")
+                              (make-sam-header "@HD	VN:1.3	SO:unsorted")
                               :coordinate)))))
 
+;; You can still manipulate headers with group order
 (addtest (cl-sam-tests) subst-group-order/1
-  (ensure (equalp (canonical-header '((:HD (:VN . "1.0") (:GO . :none))))
-                  (canonical-header
-                   (subst-group-order (make-sam-header "@HD	VN:1.0")
-                                      :none)))))
+  (ensure
+   (equalp (canonical-header '((:HD (:VN . "1.3") (:GO . :none))))
+           (canonical-header
+            (subst-group-order (make-sam-header "@HD	VN:1.3")
+                               :none)))))
 
 (addtest (cl-sam-tests) subst-group-order/2
   (ensure (equalp
-           (canonical-header '((:HD (:VN . "1.0") (:GO . :reference))))
+           (canonical-header '((:HD (:VN . "1.3") (:GO . :reference))))
            (canonical-header (subst-group-order
-                              (make-sam-header "@HD	VN:1.0	GO:none")
+                              '((:HD (:VN . "1.3") (:GO . :none)))
                               :reference)))))
