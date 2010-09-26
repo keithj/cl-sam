@@ -137,7 +137,7 @@
 
 (addtest (cl-sam-tests) make-sam-header/2 ; clashes
   (ensure-condition malformed-record-error
-    (make-sam-header "@SQ	SN:AL096846	LN:6490	LN:9999"))) 
+    (make-sam-header "@SQ	SN:AL096846	LN:6490	LN:9999")))
 
 (addtest (cl-sam-tests) make-sam-header/3 ; duplicates
   (ensure (equalp '((:HD (:VN . "1.3") (:SO . :coordinate)))
@@ -154,6 +154,12 @@
   (ensure-condition malformed-record-error
     (make-sam-header
      "@HD	VN:1.3	SO:coordinate	GO:none")))
+
+(addtest (cl-sam-tests) make-sam-header/6 ; duplicate seq names
+   (ensure-condition malformed-field-error
+    (make-sam-header
+     "@SQ	SN:AL096846	LN:6490
+@SQ	SN:AL096846	LN:6490")))
 
 (addtest (cl-sam-tests) subst-sort-order/1
   (ensure (equalp (canonical-header '((:HD (:VN . "1.3") (:SO . :coordinate))))

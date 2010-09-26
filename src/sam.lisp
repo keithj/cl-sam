@@ -144,13 +144,18 @@ and the rest of the list is itself an alist of record keys and values."
       ;; invalid tags
       (ensure-valid-header-tags (ensure-mandatory-header-tags record)))))
 
+(defun header-records (header header-type)
+  "Returns a list of all records of HEADER-TYPE from HEADER."
+  (remove-if (lambda (x)
+               (not (eql x header-type))) header :key #'first))
+
 (defun header-type (record)
-  "Returns a symbol indicating the header-type of HEADER-RECORD, being
-one of :HD , :SQ , :RG or :PG ."
+  "Returns a symbol indicating the header-type of RECORD, being one
+of :HD , :SQ , :RG or :PG ."
   (first record))
 
 (defun header-tags (record)
-  "Returns an alist of the tag-values of HEADER-RECORD."
+  "Returns an alist of the tag-values of RECORD."
   (if (atom (rest record))
       nil
       (rest record)))
@@ -241,32 +246,34 @@ describing the record type. The rest of each list is itself an alist
 of record keys and values."
   (when str
     (with-input-from-string (s str)
-      (loop
-         for line = (read-line s nil nil)
-         while line
-         for (header-type . content) = (make-header-record line)
-         collect (etypecase content
-                   (string (cons header-type content)) ; :CO header
-                   (list (let* ((tags (remove-duplicates content :test #'equal))
-                                (clashes (find-duplicate-header-tags tags))
-                                (record (cons header-type tags)))
-                           (when clashes
-                             (error 'malformed-record-error :record record
-                                    :format-control "clashing tags ~a"
-                                    :format-arguments (list clashes)))
-                           record)))))))
+      (ensure-unique-reference-names
+       (loop
+          for line = (read-line s nil nil)
+          while line
+          for (header-type . content) = (make-header-record line)
+          collect (etypecase content
+                    (string (cons header-type content)) ; :CO header
+                    (list (let* ((tags (remove-duplicates content
+                                                          :test #'equal))
+                                 (clashes (find-duplicate-header-tags tags))
+                                 (record (cons header-type tags)))
+                            (when clashes
+                              (error 'malformed-record-error :record record
+                                     :format-control "clashing tags ~a"
+                                     :format-arguments (list clashes)))
+                            record))))))))
 
-(defun name-sorted-p (sam-header)
-  "Returns T if parsed SAM-HEADER indicates that the file is sorted by
+(defun name-sorted-p (header)
+  "Returns T if parsed HEADER indicates that the file is sorted by
 name, or NIL otherwise."
-  (check-arguments (listp sam-header) (sam-header) "expected a parsed header")
-  (eql :queryname (assocdr :so (header-tags (assoc :hd sam-header)))))
+  (check-arguments (listp header) (header) "expected a parsed header")
+  (eql :queryname (assocdr :so (header-tags (assoc :hd header)))))
 
-(defun coordinate-sorted-p (sam-header)
-  "Returns T if parsed SAM-HEADER indicates that the file is sorted by
+(defun coordinate-sorted-p (header)
+  "Returns T if parsed HEADER indicates that the file is sorted by
 coordinate, or NIL otherwise."
-  (check-arguments (listp sam-header) (sam-header) "expected a parsed header")
-  (eql :coordinate (assocdr :so (header-tags (assoc :hd sam-header)))))
+  (check-arguments (listp header) (header) "expected a parsed header")
+  (eql :coordinate (assocdr :so (header-tags (assoc :hd header)))))
 
 (defun valid-sam-version-p (str)
   "Returns T if SAM version string STR matches /^[0-9]+.[0-9]$/, or
@@ -291,22 +298,19 @@ regex [!-)+-<>-~][!-~]* , or NIL otherwise."
               for i from 1 below len
               always (name-char-p (char str i)))))))
 
-(defun hd-record (&key (version *sam-version*) (sort-order :unsorted)
-                  (group-order :none))
+(defun hd-record (&key (version *sam-version*) (sort-order :unsorted))
   "Returns a new HD record."
   (assert (stringp version) (version)
           "VERSION should be a string, but was ~a" version)
   (cons :hd (reverse (pairlis (valid-header-tags :hd)
-                              (list version sort-order group-order)))))
+                              (list version sort-order)))))
 
 (defun sq-record (seq-name seq-length &key assembly-identity seq-md5 seq-uri
                   seq-species)
   "Returns a new SQ record."
-  (assert (stringp seq-name)
-          (seq-name)
+  (assert (stringp seq-name) (seq-name)
           "SEQ-NAME should be a string, but was ~a" seq-name)
-  (assert (and (integerp seq-length) (plusp seq-length))
-          (seq-length)
+  (assert (and (integerp seq-length) (plusp seq-length)) (seq-length)
           "SEQ-LENGTH should be a positive integer, but was ~a" seq-length)
   (cons :sq (remove-if #'null
                        (mapcar (lambda (key value)
@@ -320,14 +324,11 @@ regex [!-)+-<>-~][!-~]* , or NIL otherwise."
                   (platform-unit :lane) insert-size
                   sequencing-centre sequencing-date platform-tech)
   "Returns a new RG record."
-  (assert (stringp identity)
-          (identity)
+  (assert (stringp identity) (identity)
           "IDENTITY should be a string, but was ~a" identity)
-  (assert (stringp sample)
-          (sample)
+  (assert (stringp sample) (sample)
           "SAMPLE should be a string, but was ~a" sample)
-  (assert (and (integerp insert-size) (plusp insert-size))
-          (insert-size)
+  (assert (and (integerp insert-size) (plusp insert-size)) (insert-size)
           "INSERT-SIZE should be a positive integer, but was ~a" insert-size)
   (cons :rg
         (remove-if #'null
@@ -390,6 +391,20 @@ orders."
       header
       (cons (list :hd (cons :vn version)) header)))
 
+(defun ensure-unique-reference-names (header)
+  "Returns HEADER if all SQ records have unique SN tag values, with
+respect to each other, or raises a {define-condition malformed-field-error} ."
+  (loop
+     with sq-names = (make-hash-table :test #'equal)
+     for sq-record in (header-records header :sq)
+     do (let ((sn (assocdr :sn (header-tags sq-record))))
+          (if (gethash sn sq-names)
+              (error 'malformed-field-error :field sn :record sq-record
+                     :format-control "duplicate SN ~s"
+                     :format-arguments (list sn))
+              (setf (gethash sn sq-names) t)))
+     finally (return header)))
+
 ;;; SAM spec is silent on whether order within a record is
 ;;; important. For now we use acons and change the order because the
 ;;; spec doesn't forbid it.
@@ -432,34 +447,46 @@ them and returns 4 values that are lists of the collected :hd , :sq
             (:rg (push record rg))
             (:pg (push record pg))))))))
 
-(defun simplify-records (records id-tag)
+(defun simplify-records (records header-tag)
   "Returns a simplified list of header-records copied from
-RECORDS. The simplifications are removal of perfect duplicates,
-grouping of header-records by ID-TAG value and subsequent merging of
-header-records that share that ID-TAG value."
-  (let* ((unique (remove-duplicates records :test #'equalp))
-         (groups (group-by-id unique id-tag))
-         (simplified ()))
-    (dolist (record unique (nreverse simplified))
-      (let* ((id (assocdr id-tag (header-tags record)))
-             (group (gethash id groups)))
-        (if (endp (rest group))
-            (push (first group) simplified)
-          (push (reduce #'merge-header-records (nreverse group)) simplified))
-        (remhash id groups)))))
+RECORDS. The RECORDS must all be of the same type. The simplifications
+are: removal of perfect duplicates, grouping of header-records by
+HEADER-TAG value and subsequent merging of header-records that share
+that HEADER-TAG value. RECORDS may be an empty list."
+  (when records
+    (check-arguments (= 1 (length (remove-duplicates records :key #'first)))
+                     (records) "header records must be the same type")
+    (check-arguments (member header-tag
+                             (valid-header-tags (header-type (first records))))
+                     (header-tag)
+                     "~a is not valid tag for a ~a header" header-tag
+                     (header-type (first records)))
+    (let* ((unique (remove-duplicates records :test #'equalp))
+           (groups (group-by-tag unique header-tag))
+           (simplified ()))
+      (dolist (record unique (nreverse simplified))
+        (let* ((field (assocdr header-tag (header-tags record)))
+               (group (gethash field groups)))
+          (if (endp (rest group))
+              (push (first group) simplified)
+              (push (reduce #'merge-header-records
+                            (nreverse group)) simplified))
+          (remhash field groups))))))
 
-(defun group-by-id (records id-tag)
+(defun group-by-tag (records header-tag)
   "Returns a hash-table of header-records taken from list RECORDS. The
-hash-table keys are ID-TAG values taken from the records and the
-hash-table values are lists of header-records that share that ID-TAG
-value."
+hash-table keys are HEADER-TAG values taken from the records and the
+hash-table values are lists of header-records that share that
+HEADER-TAG value."
+  (check-arguments (= 1 (length (remove-duplicates records :key #'first)))
+                   (records) "header records must be the same type")
   (let ((groups (make-hash-table :test #'equalp)))
     (dolist (record records groups)
-      (let* ((id (assocdr id-tag (header-tags record)))
-             (group (gethash id groups)))
-        (setf (gethash id groups) (if group
-                                      (cons record group)
-                                      (list record)))))))
+      (let* ((field (assocdr header-tag (header-tags record)))
+             (group (gethash field groups)))
+        (setf (gethash field groups) (if group
+                                         (cons record group)
+                                         (list record)))))))
 
 (defun find-duplicate-header-tags (record)
   "Returns a list of duplicate SAM header tags found in RECORD. Each
@@ -480,3 +507,9 @@ values."
                           using (hash-value vals)
                           unless (endp (rest vals))
                           collect (list tag (nreverse vals)))))))
+
+(defun find-duplicate-records (header header-type)
+  "Returns a list of any duplicate records of HEADER-TYPE in HEADER."
+  (check-arguments (listp header) (header) "expected a parsed header")
+  (let ((records (header-records header header-type)))
+    (set-difference records (remove-duplicates records :test #'equal))))

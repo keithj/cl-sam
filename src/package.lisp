@@ -140,6 +140,7 @@
    #:valid-reference-name-p
    #:make-sam-header
    #:make-header-record
+   #:header-records
    #:header-type
    #:header-tags
    #:ensure-mandatory-header-tags
