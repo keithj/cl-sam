@@ -311,3 +311,12 @@
         (sorted (merge-pathnames "data/c1215-coordinate.bam")))
     (sort-bam-file unsorted sorted :sort-order :coordinate :buffer-size 10000)
     (ensure (fad:file-exists-p sorted))))
+
+(addtest (cl-sam-tests) valid-read-name-p/1
+  (ensure (sam::valid-read-name-p "a"))
+  (ensure (not (sam::valid-read-name-p "@")))
+  (ensure (not (sam::valid-read-name-p "a@")))
+  (ensure (sam::valid-read-name-p "a"))
+  (ensure (sam::valid-read-name-p (make-string 255 :initial-element #\a)))
+  (ensure (not (sam::valid-read-name-p (make-string 256
+                                                    :initial-element #\a)))))

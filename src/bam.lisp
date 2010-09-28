@@ -513,6 +513,19 @@ consistent."
                   (first-in-pair-p flag)
                   (second-in-pair-p flag))))))
 
+(defun valid-read-name-p (str)
+  "Returns T if STR is a valid read name matching the regex
+[!-?A-~]1,255 , or NIL otherwise. The length limit is implicit in the
+BAM format, there being 8 bits to store the read name length. This
+function is not used as it is not clear that this check is accepted by
+other implementations."
+  (flet ((name-char-p (c)
+           (and (char/= #\@ c) (< 32 (char-code c) 127))))
+    (let ((len (length str)))
+      (and (< 0 len 256) (loop
+                            for c across str
+                            always (name-char-p c))))))
+
 (defun read-length (aln)
   "Returns the length of the read described by ALN."
   (decode-int32le aln 16))
