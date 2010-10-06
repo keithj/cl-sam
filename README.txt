@@ -10,7 +10,7 @@ While cl-sam is slower than the C and Java implementations for some
 (but not all) operations, performance is good enough for real work.
 Moreover, it offers the advantages of rapid development at all levels
 in the SAM/BAM stack (zlib, bgzf, BAM and SAM) not afforded by
-scripting lanuage bindings of samtools.
+scripting language bindings of samtools.
 
 cl-sam is able to create BAM records de novo and may be used to create
 a BAM file from scratch or edit a BAM stream. SAM/BAM header
