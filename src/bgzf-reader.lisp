@@ -97,11 +97,10 @@ reentrant.")
   "Reads N characters from handle BGZF and returns them as a Lisp
 string. The NULL-TERMINATED keyword is used to indicate whether the C
 string is null-terminated so that the terminator may be consumed."
-  (let ((len (if null-terminated
-                 (1- n)
-                 n)))
-    (let ((bytes (read-bytes bgzf n)))
-      (make-sb-string bytes 0 (1- len)))))
+  (let ((bytes (read-bytes bgzf n)))
+    (if null-terminated
+        (octets-to-string bytes 0 (1- n))
+        (octets-to-string bytes))))
 
 (defun read-bgz-member (stream &optional (buffer *bgz-read-buffer*))
   "Reads one BGZ member from STREAM.

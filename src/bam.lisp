@@ -638,7 +638,7 @@ the various core data lie. See the SAM spec."
 NUM-BYTES, encoded at byte INDEX in ALN."
   ;; The read name is null terminated and the terminator is included
   ;; in the name length
-  (make-sb-string aln index (- (+ index num-bytes) 2)))
+  (octets-to-string aln index (1- (+ index num-bytes))))
 
 (defun encode-read-name (read-name aln index)
   "Returns ALN having encoded READ-NAME into it, starting at INDEX."
@@ -779,8 +779,8 @@ two-letter data keys are transformed to Lisp keywords."
      while (< tag-index (length aln))
      collect (let* ((type-index (+ tag-index +tag-size+))
                     (type-code (code-char (aref aln type-index)))
-                    (tag (intern (make-sb-string aln tag-index
-                                                 (1+ tag-index)) 'keyword))
+                    (tag (intern (octets-to-string aln tag-index
+                                                   (+ 2 tag-index)) 'keyword))
                     (val-index (1+ type-index)))
                (declare (type vector-index val-index))
                (let  ((val (ecase type-code
@@ -794,8 +794,7 @@ two-letter data keys are transformed to Lisp keywords."
                               (let ((end (position +null-byte+ aln
                                                    :start val-index)))
                                 (setf tag-index (1+ end))
-                                (make-sb-string aln val-index
-                                                (1- end))))
+                                (octets-to-string aln val-index end)))
                              (#\I         ; I unsigned 32-bit integer
                               (setf tag-index (+ val-index 4))
                               (decode-uint32le aln val-index))
