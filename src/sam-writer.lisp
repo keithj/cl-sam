@@ -172,8 +172,7 @@ NUM-BYTES, to STREAM."
      while (< tag-index (length alignment-record))
      do (let* ((type-index (+ tag-index +tag-size+))
                (type-code (code-char (aref alignment-record type-index)))
-               (tag  (make-sb-string alignment-record tag-index
-                                     (1+ tag-index)))
+               (tag (octets-to-string alignment-record tag-index (+ 2 tag-index)))
                (val-index (1+ type-index)))
           (declare (type fixnum val-index))
           (write-char #\Tab stream)
@@ -194,8 +193,8 @@ NUM-BYTES, to STREAM."
                (write-char #\: stream)
                (write-char type-code stream)
                (write-char #\: stream)
-               (write-string (make-sb-string alignment-record val-index
-                                             (1- end)) stream)))
+               (write-string (octets-to-string alignment-record val-index end)
+                             stream)))
             (#\I                        ; I unsigned 32-bit integer
              (setf tag-index (+ val-index 4))
              (write-string ":i:" stream)
