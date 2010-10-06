@@ -2,9 +2,15 @@ Introduction
 
 cl-sam is a Common Lisp toolkit for manipulation of DNA sequence
 alignment data stored in the Sequence Alignment/Map (SAM) format
-<http://samtools.sourceforge.net>. cl-sam is de novo implementation of
+(http://samtools.sourceforge.net). cl-sam is de novo implementation of
 the SAM spec in Common Lisp, using zlib via a C foreign function
 interface.
+
+While cl-sam is slower than the C and Java implementations for some
+(but not all) operations, performance is good enough for real work.
+Moreover, it offers the advantages of rapid development at all levels
+in the SAM/BAM stack (zlib, bgzf, BAM and SAM) not afforded by
+scripting lanuage bindings of samtools.
 
 cl-sam is able to create BAM records de novo and may be used to create
 a BAM file from scratch or edit a BAM stream. SAM/BAM header
@@ -21,23 +27,16 @@ Write    Yes    Yes
 
 Sorting operations are available using an external merge sort that is
 extensible by user-supplied sorting predicates. Typical coordinate
-sort performance on the same 350 Mb queryname-sorted BAM file, average
-of 3 runs:
+sort performance on the same 350 Mb queryname-sorted BAM file, median
+of 5 runs:
 
-                                 samtools C 0.1.7 sort      176 sec
+                                 samtools C 0.1.8 sort      185 sec
 
-                            Picard 1.0.7 MergeSamFiles
-             (IcedTea Java 1.6 -server -Xmx2G, 64-bit)      161 sec
-                            Picard 1.0.6 MergeSamFiles
-             (IcedTea Java 1.6 -server -Xmx2G, 64-bit)      213 sec
+                            Picard 1.32       SortSam
+             (IcedTea Java 1.6 -server -Xmx2G, 64-bit)      170 sec
 
-                            cl-sam 0.5.1 sort-bam-file
-               (Steel Bank Common Lisp 1.0.32, 64-bit)      204 sec [1]
-                                                            211 sec [2]
-                     (Clozure Common Lisp 1.4, 64-bit)      287 sec
-
-[1] Timings taken from a cold start or immediately after a full GC.
-[2] Timings taken sorting files successively in one session.
+                            cl-sam 0.9.5 sort-bam-file
+               (Steel Bank Common Lisp 1.0.43, 64-bit)      185 sec
 
 Installation
 
@@ -78,6 +77,7 @@ The components of cl-sam are divided by file as follows:
  bam.lisp          High-level BAM record data reading functions.
  bam-reader.lisp   High-level BAM file reading functions.
  bam-writer.lisp   High-level BAM file writing functions.
+ bam-index.lisp    Structures representing a samtools BAM index.
 
  sam.lisp          High-level SAM record data reading functions.
  sam-reader.lisp   High-level SAM file reading functions.
