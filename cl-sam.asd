@@ -23,14 +23,14 @@
 
 (defsystem cl-sam
     :name "cl-sam"
-    :version "0.9.5"
+    :version "0.9.6"
     :author "Keith James"
     :licence "GPL v3"
     :depends-on ((:version :cffi "0.10.3")
                  (:version :deoxybyte-gzip "0.1.8")
                  (:version :deoxybyte-io "0.6.2")
                  (:version :deoxybyte-unix "0.6.5")
-                 (:version :deoxybyte-utilities "0.9.0"))
+                 (:version :deoxybyte-utilities "0.9.1"))
     :in-order-to ((test-op (load-op :cl-sam :cl-sam-test)))
     :components
     ((:module :cl-sam
