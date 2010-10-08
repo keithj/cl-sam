@@ -143,8 +143,11 @@
    #:header-records
    #:header-type
    #:header-tags
+   #:header-value
    #:ensure-mandatory-header-tags
    #:ensure-valid-header-tags
+   #:ensure-valid-programs
+   #:previous-programs
 
    #:write-sam-header
    #:write-header-record

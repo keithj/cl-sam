@@ -100,6 +100,26 @@
   ;; CO has no tags
   (ensure-valid-header-tags '(:co . "foo")))
 
+(addtest (cl-sam-tests) previous-programs/1
+  (let ((header (make-sam-header "@HD	VN:1.3
+@SQ	SN:AL096846	LN:6490	SP:Schizosaccharomyces pombe
+@PG	ID:1	PN:program a	VN:version 1.0	CL:run_program_a -a 1 -b 2
+@PG	ID:2	PN:program a	VN:version 1.0	CL:run_program_a -x 1 -y 2
+@PG	ID:3	PN:program b	VN:version 1.0	CL:run_program_b -a 1 -b 2	PP:1
+@PG	ID:4	PN:program b	VN:version 1.0	CL:run_program_b -x 1 -y 2	PP:2
+@PG	ID:5	PN:program c	VN:version 1.0	CL:run_program_c -a 1 -b 2	PP:2
+@PG	ID:6	PN:program d	VN:version 1.0	CL:run_program_d -a 1 -b 2	PP:5
+@PG	ID:7	PN:program e	VN:version 1.0	CL:run_program_e -a 1 -b 2	PP:6
+@PG	ID:8	PN:program f	VN:version 1.0	CL:run_program_f -a 1 -b 2")))
+    (ensure (null (previous-programs header "8")))
+    (ensure (equalp '("6" "5" "2") (previous-programs header "7")))
+    (ensure (equalp '("5" "2") (previous-programs header "6")))
+    (ensure (equalp '("2") (previous-programs header "5")))
+    (ensure (equalp '("2") (previous-programs header "4")))
+    (ensure (equalp '("1") (previous-programs header "3")))
+    (ensure (null (previous-programs header "2")))
+    (ensure (null (previous-programs header "1")))))
+
 (addtest (cl-sam-tests) merge-sam-headers/1
   (let ((header '((:hd (:vn . "1.3"))
                   (:sq (:sn . "AL096846") (:ln . 6490)
@@ -151,15 +171,26 @@
 @CO	Test comment."))))
 
 (addtest (cl-sam-tests) make-sam-header/5 ; group order
-  (ensure-condition malformed-record-error
-    (make-sam-header
-     "@HD	VN:1.3	SO:coordinate	GO:none")))
+  ;; Allow reading, but don't write back. This should not raise an error.
+  ;; (ensure-condition malformed-record-error
+  ;;   (make-sam-header
+  ;;    "@HD	VN:1.3	SO:coordinate	GO:none"))
+  (make-sam-header "@HD	VN:1.3	SO:coordinate	GO:none"))
 
 (addtest (cl-sam-tests) make-sam-header/6 ; duplicate seq names
    (ensure-condition malformed-field-error
     (make-sam-header
      "@SQ	SN:AL096846	LN:6490
 @SQ	SN:AL096846	LN:6490")))
+
+(addtest (cl-sam-tests) make-sam-header/7 ; orphan previous programs
+   (ensure-condition malformed-field-error
+    (make-sam-header "@HD	VN:1.3
+@SQ	SN:AL096846	LN:6490	SP:Schizosaccharomyces pombe
+@PG	ID:1	PN:program a	VN:version 1.0	CL:run_program_a -a 1 -b 2
+@PG	ID:2	PN:program a	VN:version 1.0	CL:run_program_a -x 1 -y 2
+@PG	ID:3	PN:program b	VN:version 1.0	CL:run_program_b	PP:1
+@PG	ID:4	PN:program x	VN:version 1.0	CL:run_program_x	PP:99")))
 
 (addtest (cl-sam-tests) subst-sort-order/1
   (ensure (equalp (canonical-header '((:HD (:VN . "1.3") (:SO . :coordinate))))
@@ -188,3 +219,4 @@
            (canonical-header (subst-group-order
                               '((:HD (:VN . "1.3") (:GO . :none)))
                               :reference)))))
+
