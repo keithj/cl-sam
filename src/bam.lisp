@@ -361,18 +361,17 @@ sequence of the first base of the clipped read."
   "Returns the length of the alignment on the read."
   (loop
      for (op . len) in (alignment-cigar aln)
-     when (member op '(:i :m :s)) sum len))
+     when (member op '(:i :m :s := :x)) sum len))
 
 (defun alignment-reference-length (aln)
   "Returns the length of the alignment on the reference."
   (loop
      for (op . len) in (alignment-cigar aln)
-     when (member op '(:d :m :n)) sum len))
+     when (member op '(:d :m :n := :x)) sum len))
 
 (declaim (inline read-name-length))
 (defun read-name-length (aln)
-  "Returns the length in ASCII characters of the read name of
-ALN."
+  "Returns the length in ASCII characters of the read name of ALN."
   (decode-uint8le aln 8))
 
 (defun mapping-quality (aln)
@@ -546,8 +545,7 @@ described by ALN."
 
 (defun read-name (aln)
   "Returns the read name string described by ALN."
-  (decode-read-name aln 32
-                    (read-name-length aln)))
+  (decode-read-name aln 32 (read-name-length aln)))
 
 (defun alignment-cigar (aln)
   "Returns the CIGAR record list of the alignment described by
@@ -740,7 +738,8 @@ INDEX."
 
 (defun decode-cigar (aln index num-bytes)
   "Returns an alist of CIGAR operations from NUM-BYTES bytes within
-ALN, starting at INDEX."
+ALN, starting at INDEX. The decoding of the = and X operations is not
+documented in the spec."
   (flet ((decode-len (uint32)
            (ash uint32 -4))
          (decode-op (uint32)
@@ -751,7 +750,9 @@ ALN, starting at INDEX."
              (3 :n)
              (4 :s)
              (5 :h)
-             (6 :p))))
+             (6 :p)
+             (7 :=)
+             (8 :x))))
     (loop
        for i from index below (1- (+ index num-bytes)) by 4
        collect (let ((x (decode-uint32le aln i)))
@@ -768,13 +769,15 @@ ALN, starting at INDEX."
                                              (:n 3)
                                              (:s 4)
                                              (:h 5)
-                                             (:p 6)))
+                                             (:p 6)
+                                             (:= 7)
+                                             (:x 8)))
              uint32)))
     (loop
        for (op . length) in cigar
        for i = index then (+ 4 i)
        do (encode-int32le (encode-op-len op length) aln i)
-           finally (return aln))))
+       finally (return aln))))
 
 (defun decode-tag-values (aln index)
   "Returns a list of auxilliary data from ALN at INDEX. The BAM
