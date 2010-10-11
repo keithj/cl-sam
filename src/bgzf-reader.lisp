@@ -121,26 +121,30 @@ Returns:
 
 - A BGZ structure, or NIL."
   (declare (optimize (speed 3)))
-  (flet ((decode-bytes (s n)
-           (when (plusp (read-sequence buffer s :end n))
+  (flet ((decode-bytes (n)
+           (when (plusp (read-sequence buffer stream :end n))
              (ecase n
                (1 (decode-uint8le buffer))
                (2 (decode-uint16le buffer))
-               (4 (decode-uint32le buffer))))))
+               (4 (decode-uint32le buffer)))))
+         (skip-string (stream)
+           (loop
+              for c of-type octet = (read-byte stream)
+              until (zerop c))))
     (let ((fpos (file-position stream))
-          (id1 (decode-bytes stream 1)))
+          (id1 (decode-bytes 1)))
       (when id1
-        (let* ((id2 (decode-bytes stream 1))
-               (cm (decode-bytes stream 1))
-               (flg (decode-bytes stream 1))
-               (mtime (decode-bytes stream 4))
-               (xfl (decode-bytes stream 1))
-               (os (decode-bytes stream 1))
-               (xlen (decode-bytes stream 2))
-               (sf1 (decode-bytes stream 1))
-               (sf2 (decode-bytes stream 1))
-               (slen (decode-bytes stream 2))
-               (bsize (decode-bytes stream 2))) ; 18 header bytes
+        (let* ((id2 (decode-bytes 1))
+               (cm (decode-bytes 1))
+               (flg (decode-bytes 1))
+               (mtime (decode-bytes 4))
+               (xfl (decode-bytes 1))
+               (os (decode-bytes 1))
+               (xlen (decode-bytes 2))
+               (sf1 (decode-bytes 1))
+               (sf2 (decode-bytes 1))
+               (slen (decode-bytes 2))
+               (bsize (decode-bytes 2))) ; 18 header bytes
           (declare (ignore xfl))
           (unless (and (= gz:+id1+ id1)
                        (= gz:+id2+ id2)
@@ -160,9 +164,21 @@ Returns:
                                +member-footer-length+))
                  (cdata (make-array cdata-len :element-type 'octet
                                     :initial-element 0)))
+            ;; I haven't seen BGZF files in the wild having the
+            ;; following, but potentially they may.
+            ;; Skip fname if present
+            (when (plusp (logand flg gz:+flag-name+))
+               (skip-string stream))
+            ;; skip fcomment if present
+            (when (plusp (logand flg gz:+flag-comment+))
+              (skip-string stream))
+            ;; skip fhcrc if present
+            (when (plusp (logand flg gz:+flag-fhcrc+))
+              (dotimes (n 2)
+                (read-byte stream)))
             (read-sequence cdata stream)
-            (let* ((crc32 (decode-bytes stream 4))
-                   (isize (decode-bytes stream 4))) ; 8 footer bytes
+            (let* ((crc32 (decode-bytes 4))
+                   (isize (decode-bytes 4))) ; 8 footer bytes
               (make-bgz-member :mtime mtime :os os :xlen xlen
                                :bsize deflated-size
                                :cdata cdata :cend cdata-len
