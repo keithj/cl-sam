@@ -25,6 +25,10 @@
   "The termination byte for BAM strings.")
 (defconstant +unknown-quality+ #xff
   "The value for unavailable quality scores.")
+(defconstant +unknown-position+ -1
+  "The position value for unmapped reads.")
+(defconstant +unknown-reference+ -1
+  "The reference id for unmapped reads.")
 
 (defvar *bam-magic* (make-array 4 :element-type 'octet
                                 :initial-contents '(66 65 77 1))
@@ -185,8 +189,10 @@ names for the reference data in REF-META-LIST."
       (setf (gethash (first ref-meta) ref-table) (second ref-meta)))))
 
 (defun make-alignment-record (read-name seq-str alignment-flag
-                              &key (reference-id -1) (alignment-pos -1)
-                              (mate-reference-id -1) (mate-alignment-pos -1)
+                              &key (reference-id +unknown-reference+)
+                              (alignment-pos +unknown-position+)
+                              (mate-reference-id +unknown-reference+)
+                              (mate-alignment-pos +unknown-position+)
                               (mapping-quality 0) (alignment-bin 0)
                               (insert-length 0)
                               cigar quality-str tag-values)
