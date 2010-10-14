@@ -32,14 +32,18 @@
   "The BAI index file magic header bytes.")
 
 (defstruct bam-index
-  "A BAM file index covering all reference sequences."
+  "A BAM file index covering all the reference sequences in a BAM
+file."
   (refs (make-array 0) :type simple-vector))
 
-(defstruct ref-index
+(defstruct (ref-index (:print-object print-ref-index))
   "An index for a single reference sequence. An index is composed of a
 vector of bins (the binning index) and a vector of intervals (the
-linear index). The bins are sorted by increasing bin number."
-  (bins (make-array 0) :type simple-vector)
+linear index). The bins are sorted by increasing bin number. The
+binning index is hierarchical, while the linear index is flat, being a
+projection of reads from all bins onto a single vector."
+  (num -1 :type fixnum :read-only t)
+  (bins (make-array 0 :initial-element nil) :type simple-vector)
   (intervals (make-array 0) :type simple-vector))
 
 (defstruct (samtools-ref-index (:include ref-index))
@@ -62,13 +66,13 @@ sequence that is identified by a number. The bin location and
 numbering system used is the UCSC binning scheme by Richard Durbin and
 Lincoln Stein. A bin contains a vector of chunks."
   (num 0 :type fixnum :read-only t)
-  (chunks (make-array 0) :type simple-vector))
+  (chunks (make-array 10 :adjustable t :fill-pointer 0) :type vector))
 
 (defstruct (chunk (:print-object print-chunk))
   "A chunk within a BAM index bin. Chunks are groups of records that
 lie within a bin and are close together within the BAM file."
   (start 0 :type (unsigned-byte 64))
-  (end 0 :type (unsigned-byte 64)))
+  (end most-positive-fixnum :type (unsigned-byte 64)))
 
 (defstruct interval
   "A compressed interval within a BAM linear index. An interval is a
@@ -76,8 +80,23 @@ range covering 2^14 bases that starts a particular virtual offset
 within a BAM file. Identical, adjacent intervals are run-length
 compressed by incrementing the interval number for each interval in
 the run."
-  (num 1 :type fixnum)
+  (num 1 :type fixnum :read-only t)
   (offset 0 :type fixnum))
+
+(defun print-ref-index (ref-index stream)
+  "Prints a string representation of REF-INDEX to STREAM."
+  (print-unreadable-object (ref-index stream :type t)
+    (format stream "ref: ~d " (ref-index-num ref-index))
+    (princ (remove-if #'null (ref-index-bins ref-index)) stream)
+    (terpri stream)
+    (write-string "linear index: " stream)
+    (princ (coerce
+            (loop
+               with intervals = (ref-index-intervals ref-index)
+               for i from 0 below (length intervals)
+               for interval = (svref intervals i)
+               when (plusp interval)
+               collect (format nil "~d:~d" i interval)) 'vector) stream)))
 
 (defun print-bin (bin stream)
   "Prints a string representation of BIN to STREAM."
@@ -88,17 +107,39 @@ the run."
 
 (defun print-chunk (chunk stream)
   "Prints a string representation of CHUNK to STREAM."
-  (print-unreadable-object (chunk stream :type t)
+  (print-unreadable-object (chunk stream :type nil)
     (let ((start (chunk-start chunk))
           (end (chunk-end chunk)))
       (format stream "~d:~d..~d:~d"
-              (bgzf-virtual-position start) (bgzf-virtual-offset start)
-              (bgzf-virtual-position end) (bgzf-virtual-offset end)))))
+              (bgzf-coffset start) (bgzf-uoffset start)
+              (bgzf-coffset end) (bgzf-uoffset end)))))
 
 (defun ref-index (bam-index ref-num)
   "Returns the reference index for reference number REF-NUM in
 BAM-INDEX."
   (svref (bam-index-refs bam-index) ref-num))
+
+(defun (setf ref-index) (ref-index bam-index ref-num)
+  (setf (svref (bam-index-refs bam-index) ref-num) ref-index))
+
+(defun ref-index-bin (ref-index bin-num)
+  "Returns the BIN number BIN-NUM in REF-INDEX."
+  (svref (ref-index-bins ref-index) bin-num))
+
+(defun (setf ref-index-bin) (bin ref-index bin-num)
+  (setf (svref (ref-index-bins ref-index) bin-num) bin))
+
+(defun bin-chunk (bin chunk-num)
+  "Returns the chunk number CHUNK-NUM in BIN."
+  (svref (bin-chunks bin) chunk-num))
+
+(defun (setf bin-chunk) (chunk bin chunk-num)
+  (setf (svref (bin-chunks bin) chunk-num) chunk))
+
+(defun append-chunk (bin chunk)
+  "Appends CHUNK to the chunk vector of BIN and returns BIN."
+  (vector-push-extend chunk (bin-chunks bin))
+  bin)
 
 (defun region-to-bins (start end)
   "Returns a bit vector with the bits for relevant bins set, given
