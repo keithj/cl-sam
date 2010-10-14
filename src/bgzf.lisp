@@ -164,10 +164,14 @@ Returns:
 (defun bgzf-open-p (bgzf)
   (open-stream-p (bgzf-stream bgzf)))
 
-(defun bgzf-virtual-position (position)
+(defun bgzf-coffset (position)
+  "Returns the compressed offset (most significant bits) component of
+BGZF virtual offset POSITION."
   (logand (ash position -16) #xffffffffffff))
 
-(defun bgzf-virtual-offset (position)
+(defun bgzf-uoffset (position)
+  "Returns the uncompressed (least significant bits) component of BGZF
+virtual offset POSITION."
   (logand position #xffff))
 
 (defun bgzf-seek (bgzf position)
