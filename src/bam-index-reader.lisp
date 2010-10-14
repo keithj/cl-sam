@@ -65,10 +65,10 @@ or raises a {define-condition malformed-file-error} if not."
         (loop
            with refs = (make-array num-refs)
            for i from 0 below num-refs
-           do (setf (svref refs i) (read-ref-index stream))
+           do (setf (svref refs i) (read-ref-index i stream))
            finally (return (make-bam-index :refs refs)))))))
 
-(defun read-ref-index (stream)
+(defun read-ref-index (ref-num stream)
   "Reads an index for a single reference sequence from STREAM."
   (let ((bytes (make-array 4 :element-type 'octet)))
     (flet ((read-index-size ()
@@ -79,7 +79,7 @@ or raises a {define-condition malformed-file-error} if not."
              (num-intervals (read-index-size))
              (intervals (read-linear-index num-intervals stream)))
         (if (zerop num-bins)
-            (make-ref-index :bins bins :intervals intervals)
+            (make-ref-index :num ref-num :bins bins :intervals intervals)
             (let ((last-bin (svref bins (1- num-bins)))) ; kludge
               (cond ((= +samtools-kludge-bin+ (bin-num last-bin))
                      (let ((x (svref (bin-chunks last-bin) 0))
@@ -96,7 +96,8 @@ or raises a {define-condition malformed-file-error} if not."
                             :record last-bin
                             :format-control "bin number out of range"))
                     (t
-                     (make-ref-index :bins bins :intervals intervals)))))))))
+                     (make-ref-index :num ref-num :bins bins
+                                     :intervals intervals)))))))))
 
 (defun read-binning-index (num-bins stream)
   "Reads NUM-BINS bins from STREAM, returning a vector of bins, sorted
