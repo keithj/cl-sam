@@ -50,6 +50,7 @@
                            (:file "external-bam-sort")
                            (:file "bam-index")
                            (:file "bam-index-reader")
+                           (:file "bam-index-writer")
                            (:file "bam-utilities")
                            (:file "cl-sam")))
      (:lift-test-config :lift-tests

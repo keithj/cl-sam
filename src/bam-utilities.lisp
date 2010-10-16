@@ -32,7 +32,7 @@ the Burrows-Wheeler index.
 
 This function attempts to fix invalid mapped-proper-pair flags in
 cases where query-unmapped and/or mate-unmapped flags are set. Such
-unmapped reads may also have reference-ids set and good mappings
+unmapped reads may also have reference-ids set and good mapping
 scores. This function does not correct these other fields.
 
 It is necessary to use this function in order to obtain correct flag

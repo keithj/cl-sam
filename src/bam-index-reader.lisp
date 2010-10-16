@@ -84,7 +84,8 @@ or raises a {define-condition malformed-file-error} if not."
               (cond ((= +samtools-kludge-bin+ (bin-num last-bin))
                      (let ((x (svref (bin-chunks last-bin) 0))
                            (y (svref (bin-chunks last-bin) 1)))
-                       (make-samtools-ref-index :bins (subseq bins 0
+                       (make-samtools-ref-index :num ref-num
+                                                :bins (subseq bins 0
                                                               (1- num-bins))
                                                 :intervals intervals
                                                 :start (chunk-start x)
@@ -139,27 +140,9 @@ them in a vector. Identical intervals are run-length compressed."
   (let ((bytes (make-array 8 :element-type 'octet)))
     (flet ((read-ioffset ()
              (read-sequence bytes stream)
-             (decode-uint64le bytes))
-           (compress (ioffsets)
-             (when ioffsets
-               (let ((current (first ioffsets))
-                     (run-length 1)
-                     (result ()))
-                 (dolist (ioffset (rest ioffsets)
-                          (progn
-                            (push (list run-length current) result)
-                            (nreverse result)))
-                     (cond ((= current ioffset)
-                            (incf run-length))
-                           (t
-                            (push (list run-length current) result)
-                            (setf current ioffset
-                                  run-length 1))))))))
-      (let ((intervals (compress (loop
-                                    repeat num-intervals
-                                    collect (read-ioffset)))))
-        (make-array (length intervals)
-                    :initial-contents
-                    (mapcar (lambda (i)
-                              (make-interval :num (first i) :offset (second i)))
-                            intervals))))))
+             (decode-uint64le bytes)))
+      (let ((intervals (loop
+                          repeat num-intervals
+                          collect (read-ioffset))))
+        (make-array (length intervals) :element-type 'fixnum
+                    :initial-contents intervals)))))
