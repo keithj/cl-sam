@@ -81,7 +81,7 @@ Returns:
 (defmethod stream-element-type ((stream bgzip-stream))
   'octet)
 
-(defmethod close ((stream bgzip-stream) &key abort)
+(defmethod stream-close ((stream bgzip-stream) &key abort)
   (declare (ignore abort))
   (when (open-stream-p stream)
     (unwind-protect
