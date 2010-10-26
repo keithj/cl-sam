@@ -20,6 +20,8 @@
 (in-package :sam)
 
 (defun view-sam (bam-filespec sam-filespec)
+  "Writes the contents of binary BAM file BAM-FILESPEC to SAM text
+file SAM-FILESPEC."
   (let ((*print-pretty* nil))
     (with-bgzf (bam bam-filespec)
       (with-open-file (sam sam-filespec
@@ -28,6 +30,8 @@
         (stream-view-sam bam sam)))))
 
 (defun stream-view-sam (bam &optional (stream t))
+  "Writes the binary BAM records from BGZF stream BAM to STREAM, in
+SAM text format."
   (unless (zerop (bgzf-tell bam))     ; Rewind unless already at start
     (bgzf-seek bam 0))
   (multiple-value-bind (header num-refs ref-meta)

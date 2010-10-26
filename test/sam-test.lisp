@@ -120,103 +120,20 @@
     (ensure (null (previous-programs header "2")))
     (ensure (null (previous-programs header "1")))))
 
-(addtest (cl-sam-tests) merge-sam-headers/1
-  (let ((header '((:hd (:vn . "1.3"))
-                  (:sq (:sn . "AL096846") (:ln . 6490)
-                   (:sp . "Schizosaccharomyces pombe"))
-                  (:pg (:id . "bwa") (:vn . "0.4.6")))))
-    (ensure (equalp header (merge-sam-headers header header)))
-    (ensure (equalp (canonical-header header)
-                    (canonical-header
-                     (merge-sam-headers
-                      '((:hd (:vn . "1.3"))
-                        (:sq (:sn . "AL096846") (:ln . 6490)))
-                      '((:hd (:vn . "1.3"))
-                        (:sq (:sn . "AL096846") (:ln . 6490)
-                         (:sp . "Schizosaccharomyces pombe"))
-                        (:pg (:id . "bwa") (:vn . "0.4.6")))))))))
+(addtest (cl-sam-tests) last-programs/1
+  (ensure (null (last-programs (make-sam-header "@HD	VN:1.3"))))
+  (ensure (equal "1" (last-programs (make-sam-header "@HD	VN:1.3
+@PG	ID:1	PN:program a	VN:version 1.0	CL:run_program_a -a 1 -b 2")))))
 
-(addtest (cl-sam-tests) merge-sam-headers/2
-  (let ((header1 '((:hd (:vn . "1.3"))
-                   (:sq (:sn . "AL096846") (:ln . 6490))))
-        (header2 '((:hd (:vn . "1.3"))
-                   (:sq (:sn . "AL096846") (:ln . 9999)
-                    (:sp . "Schizosaccharomyces pombe"))
-                   (:pg (:id . "bwa") (:vn . "0.4.6")))))
-    (ensure-condition invalid-operation-error
-      (merge-sam-headers header1 header2))))
-
-(addtest (cl-sam-tests) make-sam-header/1
-  (let ((expected '((:hd (:vn . "1.3"))
-                    (:sq (:sn . "AL096846") (:ln . 6490)
-                     (:sp . "Schizosaccharomyces pombe"))))
-        (result (make-sam-header "@HD	VN:1.3
-@SQ	SN:AL096846	LN:6490	SP:Schizosaccharomyces pombe")))
-    (ensure (equalp (canonical-header expected)
-                    (canonical-header result)))))
-
-(addtest (cl-sam-tests) make-sam-header/2 ; clashes
-  (ensure-condition malformed-record-error
-    (make-sam-header "@SQ	SN:AL096846	LN:6490	LN:9999")))
-
-(addtest (cl-sam-tests) make-sam-header/3 ; duplicates
-  (ensure (equalp '((:HD (:VN . "1.3") (:SO . :coordinate)))
-                  (make-sam-header
-                   "@HD	VN:1.3	SO:coordinate	SO:coordinate"))))
-
-(addtest (cl-sam-tests) make-sam-header/4 ; Comment header
-  (ensure (equalp '((:HD (:VN . "1.3")) (:CO . "Test comment."))
-                  (make-sam-header
-                   "@HD	VN:1.3
-@CO	Test comment."))))
-
-(addtest (cl-sam-tests) make-sam-header/5 ; group order
-  ;; Allow reading, but don't write back. This should not raise an error.
-  ;; (ensure-condition malformed-record-error
-  ;;   (make-sam-header
-  ;;    "@HD	VN:1.3	SO:coordinate	GO:none"))
-  (make-sam-header "@HD	VN:1.3	SO:coordinate	GO:none"))
-
-(addtest (cl-sam-tests) make-sam-header/6 ; duplicate seq names
-   (ensure-condition malformed-field-error
-    (make-sam-header
-     "@SQ	SN:AL096846	LN:6490
-@SQ	SN:AL096846	LN:6490")))
-
-(addtest (cl-sam-tests) make-sam-header/7 ; orphan previous programs
-   (ensure-condition malformed-field-error
-    (make-sam-header "@HD	VN:1.3
+(addtest (cl-sam-tests) last-programs/1
+  (let ((header (make-sam-header "@HD	VN:1.3
 @SQ	SN:AL096846	LN:6490	SP:Schizosaccharomyces pombe
 @PG	ID:1	PN:program a	VN:version 1.0	CL:run_program_a -a 1 -b 2
 @PG	ID:2	PN:program a	VN:version 1.0	CL:run_program_a -x 1 -y 2
-@PG	ID:3	PN:program b	VN:version 1.0	CL:run_program_b	PP:1
-@PG	ID:4	PN:program x	VN:version 1.0	CL:run_program_x	PP:99")))
-
-(addtest (cl-sam-tests) subst-sort-order/1
-  (ensure (equalp (canonical-header '((:HD (:VN . "1.3") (:SO . :coordinate))))
-                  (canonical-header
-                   (subst-sort-order (make-sam-header "@HD	VN:1.3")
-                                     :coordinate)))))
-
-(addtest (cl-sam-tests) subst-sort-order/2
-  (ensure (equalp
-           (canonical-header '((:HD (:VN . "1.3") (:SO . :coordinate))))
-           (canonical-header (subst-sort-order
-                              (make-sam-header "@HD	VN:1.3	SO:unsorted")
-                              :coordinate)))))
-
-;; You can still manipulate headers with group order
-(addtest (cl-sam-tests) subst-group-order/1
-  (ensure
-   (equalp (canonical-header '((:HD (:VN . "1.3") (:GO . :none))))
-           (canonical-header
-            (subst-group-order (make-sam-header "@HD	VN:1.3")
-                               :none)))))
-
-(addtest (cl-sam-tests) subst-group-order/2
-  (ensure (equalp
-           (canonical-header '((:HD (:VN . "1.3") (:GO . :reference))))
-           (canonical-header (subst-group-order
-                              '((:HD (:VN . "1.3") (:GO . :none)))
-                              :reference)))))
-
+@PG	ID:3	PN:program b	VN:version 1.0	CL:run_program_b -a 1 -b 2	PP:1
+@PG	ID:4	PN:program b	VN:version 1.0	CL:run_program_b -x 1 -y 2	PP:2
+@PG	ID:5	PN:program c	VN:version 1.0	CL:run_program_c -a 1 -b 2	PP:2
+@PG	ID:6	PN:program d	VN:version 1.0	CL:run_program_d -a 1 -b 2	PP:5
+@PG	ID:7	PN:program e	VN:version 1.0	CL:run_program_e -a 1 -b 2	PP:6
+@PG	ID:8	PN:program f	VN:version 1.0	CL:run_program_f -a 1 -b 2")))
+    (ensure (equalp '("3" "4" "7" "8") (last-programs header)))))

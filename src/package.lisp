@@ -148,6 +148,7 @@
    #:ensure-valid-header-tags
    #:ensure-valid-programs
    #:previous-programs
+   #:last-programs
 
    #:write-sam-header
    #:write-header-record

@@ -80,12 +80,11 @@ specification.
 - offset: The within-member offset component of the BGZF virtual file
   offset (least significant 16 bits). This is a position within the
   uncompressed data of the member.
-
+- util-buffer: a 4 byte buffer used internally to store an integer.
 - loaded-p: T if the bgz data has been loaded into the buffer (used
   internally in decompression and reading).
 - load-seek: On loading the bgz data, proceed immediately to this
   offset (used internally in decompression and reading).
-
 - eof: T if the decompression process has reached EOF (used internally
   in decompression and reading)."
   (pathname nil :type t)
@@ -96,6 +95,8 @@ specification.
   (position 0 :type (unsigned-byte 48))
   (offset 0 :type uint16)
   (pointer 0 :type uint16)
+  (util-buffer (make-array 4 :element-type 'octet :initial-element 0)
+               :type (simple-array octet (4)))
   (loaded-p nil :type t)
   (load-seek 0 :type uint16)
   (eof nil :type t))

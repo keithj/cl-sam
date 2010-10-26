@@ -19,12 +19,6 @@
 
 (in-package :sam)
 
-(defvar *bgz-write-buffer* (make-array 4 :element-type 'octet
-                                       :initial-element 0)
-  "The buffer used by {defun write-bgz-member} for writing block gzip
-data. Rebind this per thread to make {defun write-bgz-member}
-reentrant.")
-
 (declaim (ftype (function (bgzf simple-octet-vector vector-index
                            &key (:compress t) (:mtime integer)) fixnum)
                 write-bytes))
@@ -61,7 +55,7 @@ reentrant.")
                                           +member-footer-length+)
                                 :isize bytes-in
                                 :crc32 (gz:crc32 udata))))
-                     (write-bgz-member bgz stream)
+                     (write-bgz-member bgz stream (bgzf-util-buffer bgzf))
                      (if (< bytes-in (length buf)) ; Didn't fit
                          (store-overflow bytes-in)
                          (setf (bgzf-pointer bgzf) 0))
@@ -105,7 +99,7 @@ reentrant.")
                                                  +member-footer-length+)
                                        :isize bytes-in
                                        :crc32 (gz:crc32 udata))))
-            (write-bgz-member bgz (bgzf-stream bgzf))
+            (write-bgz-member bgz (bgzf-stream bgzf) (bgzf-util-buffer bgzf))
             (if (< bytes-in (length buffer)) ; Didn't fit
                 (let ((overflow (subseq buffer bytes-in (bgzf-pointer bgzf))))
                   (replace buffer overflow)
@@ -115,20 +109,15 @@ reentrant.")
   (when append-eof
     (write-sequence *empty-bgz-record* (bgzf-stream bgzf))))
 
-(defun write-bgz-member (bgz stream &optional (buffer *bgz-write-buffer*))
+(defun write-bgz-member (bgz stream buffer)
   "Writes one BGZ member to STREAM.
 
 Arguments:
 
+- bgz (bgz member): A bgz member to write.
 - stream (octet output-stream): An open stream.
-
-Optional:
-
 - buffer (simple-octet-vector): A re-usable read buffer which must be
-  able to contain at least 4 bytes. Defaults to *BGZ-WRITE-BUFFER*
-  . This argument is only required where the the function calls must
-  be reentrant (normally achieved by rebinding *BGZ-WRITE-BUFFER* per
-  thread).
+  able to contain at least 4 bytes.
 
 Returns:
 

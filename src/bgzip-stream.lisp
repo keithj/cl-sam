@@ -19,7 +19,7 @@
 
 (in-package :sam)
 
-(defconstant +bgzip-buffer-size+ 8192
+(defconstant +bgzip-buffer-size+ 4096
   "Buffer size for {defclass bgzip-input-stream} internal buffer.")
 
 (deftype bgzip-buffer ()

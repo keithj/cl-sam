@@ -19,11 +19,6 @@
 
 (in-package :sam)
 
-(defvar *bgz-read-buffer* (make-array 4 :element-type 'octet :initial-element 0)
-  "The buffer used by {defun read-bgz-member} for reading block gzip
-data. Rebind this per thread to make {defun read-bgz-member}
-reentrant.")
-
 ;; The algorithm below relies on a fresh udata (uncompressed data)
 ;; vector being made for each bgz member as it is read. This vector is
 ;; setf'd to the buffer slot in the bgzf reader struct. The vector
@@ -48,7 +43,7 @@ reentrant.")
              (inflate-from-bgz ()
                (loop
                   for pos = (file-position stream)
-                  for bgz = (read-bgz-member stream)
+                  for bgz = (read-bgz-member stream (bgzf-util-buffer bgzf))
                   until (or (null bgz)                      ; eof
                             (plusp (bgz-member-isize bgz))) ; skip if empty
                   finally (if bgz
@@ -102,20 +97,15 @@ string is null-terminated so that the terminator may be consumed."
         (octets-to-string bytes 0 (1- n))
         (octets-to-string bytes))))
 
-(defun read-bgz-member (stream &optional (buffer *bgz-read-buffer*))
-  "Reads one BGZ member from STREAM.
+(defun read-bgz-member (stream buffer)
+  "Reads one BGZ member from STREAM, using BUFFER to hold integers as
+they are read.
 
 Arguments:
 
 - stream (octet input-stream): An open stream.
-
-Optional:
-
 - buffer (simple-octet-vector): A re-usable read buffer which must be
-  able to contain at least 4 bytes. Defaults to *BGZ-READ-BUFFER*
-  . This argument is only required where the the function calls must
-  be reentrant (normally achieved by rebinding *BGZ-READ-BUFFER* per
-  thread).
+  able to contain at least 4 bytes.
 
 Returns:
 
@@ -168,7 +158,7 @@ Returns:
             ;; following, but potentially they may.
             ;; Skip fname if present
             (when (plusp (logand flg gz:+flag-name+))
-               (skip-string stream))
+              (skip-string stream))
             ;; skip fcomment if present
             (when (plusp (logand flg gz:+flag-comment+))
               (skip-string stream))

@@ -329,7 +329,20 @@ most recently used program first i.e. reverse chronological order."
          for id = (pp identity) then (pp id)
          while id
          collect id))))
-  
+
+(defun last-programs (header)
+  "Returns a list of the PG ID values from HEADER that are the last
+programs to act on the data. i.e. these are the leaf programs in the
+previous program tree."
+  (let* ((prog-ids (mapcar (lambda (rec)
+                             (header-value rec :id)) (header-records header :pg)))
+         (all-paths (mapcar (lambda (id)
+                              (previous-programs header id)) prog-ids)))
+    (stable-sort
+     (set-difference prog-ids (remove-duplicates
+                               (apply #'concatenate 'list all-paths) :test #'equal)
+                     :test #'equal) #'string<)))
+
 (defun header-record (record-type &rest args)
   "Returns a new header record of HEADER-TYPE. ARGS are tag values in
 the same order as the tag returned by {defun valid-header-tags} ,
