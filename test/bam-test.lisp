@@ -180,7 +180,7 @@
                        (tmp-pathname :tmpdir (merge-pathnames "data")
                                      :basename "bam-roundtrip-"))))
     (with-bgzf (in in-filespec :direction :input)
-      (with-bgzf (out out-filespec :direction :output)
+      (with-bgzf (out out-filespec :direction :output :if-exists :supersede)
         (multiple-value-bind (header num-refs ref-meta)
             (read-bam-meta in)
           (write-bam-meta out header num-refs ref-meta)

@@ -101,8 +101,7 @@ specification.
   (load-seek 0 :type uint16)
   (eof nil :type t))
 
-(defmacro with-bgzf ((var filespec &key (direction :input)
-                          (if-exists :overwrite)) &body body)
+(defmacro with-bgzf ((var filespec &rest args) &body body)
   "Executes BODY with VAR bound to a BGZF handle structure created by
 opening the file denoted by FILESPEC.
 
@@ -111,21 +110,17 @@ Arguments:
 - var (symbol): The symbol to be bound.
 - filespec (pathname designator): The file to open.
 
-Key:
+Rest:
 
-- direction (keyword): The direction, one of either :input or :output .
-- if-exists (keyword): Behaviour with respoect to existing
-  files. Defaults to :overwrite ."
-  `(let ((,var (bgzf-open ,filespec :direction ,direction
-                          :if-exists ,if-exists)))
+- args: Arguments applicable to bgzf-open."
+  `(let ((,var (bgzf-open ,filespec ,@args)))
     (unwind-protect
          (progn
            ,@body)
       (when ,var
         (bgzf-close ,var)))))
 
-(defun bgzf-open (filespec &key (direction :input) compression
-                  (if-exists :overwrite))
+(defun bgzf-open (filespec &rest args &key compression &allow-other-keys)
   "Opens a block gzip file for reading or writing.
 
 Arguments:
@@ -134,15 +129,16 @@ Arguments:
 
 Key:
 
-- direction (keyword): The direction, one of either :read or :write .
-- if-exists (keyword): Behaviour with respect to existing
-  files. Defaults to :overwrite .
+- compression (keyword): The zlib compression level (for writing).
+
+Also accepts the keyword arguments applicable to CL:OPEN. However,
+an :element-type argument will be ignored as the type is always octet.
 
 Returns:
 
 - A BGZF structure."
-  (let ((stream (open filespec :element-type 'octet :direction direction
-                      :if-exists if-exists :if-does-not-exist :create)))
+  (let ((stream (apply #'open filespec :element-type 'octet
+                       (remove-key-values '(:element-type :compression) args))))
     (if compression
         (make-bgzf :stream stream :pathname filespec :compression compression)
         (make-bgzf :stream stream :pathname filespec))))
