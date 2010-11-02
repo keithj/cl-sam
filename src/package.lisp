@@ -150,6 +150,9 @@
    #:previous-programs
    #:last-programs
 
+   #:pg-record
+   #:add-pg-record
+
    #:write-sam-header
    #:write-header-record
    #:write-sam-alignment

@@ -335,12 +335,14 @@ most recently used program first i.e. reverse chronological order."
 programs to act on the data. i.e. these are the leaf programs in the
 previous program tree."
   (let* ((prog-ids (mapcar (lambda (rec)
-                             (header-value rec :id)) (header-records header :pg)))
+                             (header-value rec :id))
+                           (header-records header :pg)))
          (all-paths (mapcar (lambda (id)
                               (previous-programs header id)) prog-ids)))
     (stable-sort
      (set-difference prog-ids (remove-duplicates
-                               (apply #'concatenate 'list all-paths) :test #'equal)
+                               (apply #'concatenate 'list all-paths)
+                               :test #'equal)
                      :test #'equal) #'string<)))
 
 (defun header-record (record-type &rest args)
@@ -571,3 +573,49 @@ values."
   (check-arguments (listp header) (header) "expected a parsed header")
   (let ((records (header-records header header-type)))
     (set-difference records (remove-duplicates records :test #'equal))))
+
+(defun add-pg-record (header new-record)
+  "Returns a copy of HEADER with PG record NEW-RECORD added. If the ID
+of NEW-RECORD clashes with existing IDs, all IDs are remapped to new,
+generated sequential integer IDs, starting at 0. PP links are also
+updated. NEW-RECORD must have its PP field set by the caller."
+  (multiple-value-bind (hd sq rg pg)
+      (partition-by-type (list header))
+    (nconc hd sq rg (update-pg-records pg new-record))))
+
+(defun update-pg-records (current-records new-record)
+  "Returns a copy of CURRENT-RECORDS with NEW-RECORD added."
+  (let* ((current-records current-records)
+         (new-id (header-value new-record :id))
+         (new-pp (header-value new-record :pp))
+         (current-ids (mapcar (lambda (rec)
+                                (header-value rec :id)) current-records))
+         (num-ids (iota (length current-records)))
+         (current-pps (mapcar (lambda (rec)
+                                (header-value rec :pp)) current-records)))
+    (check-arguments (or (null new-pp) (find new-pp current-ids :test #'string=))
+                     (new-record)
+                     "previous program ~s not found" new-pp)
+    (labels ((map-id (id)
+               "Map old ID to new, numeric identifier"
+               (when id                 ; null maps to null
+                 (elt num-ids (position id current-ids :test #'equal))))
+             (map-kv (k v rec)
+               "Substitute conses in REC bearing IDs"
+               (if v
+                   (subst (cons k (map-id v)) (cons k v) rec :test #'equal)
+                   rec)))
+      (nreverse
+       (if (member new-id current-ids :test #'string=) ; ID clash
+           (let ((mod-records (mapcar (lambda (id pp record)
+                                        (map-kv :pp pp (map-kv :id id record)))
+                                      current-ids current-pps current-records))
+                 (num-id (format nil "~d" (length current-records)))
+                 (current-pp (header-value new-record :pp)))
+             (cons (subst (cons :pp (map-id current-pp)) ; substitute PP
+                          (cons :pp current-pp)
+                          (subst (cons :id num-id) ; substitute ID
+                                 (cons :id new-id) new-record :test #'equal)
+                          :test #'equal)
+                   (reverse mod-records)))
+           (cons new-record (reverse current-records)))))))
