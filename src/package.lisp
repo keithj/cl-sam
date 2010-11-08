@@ -150,6 +150,9 @@
    #:previous-programs
    #:last-programs
 
+   #:hd-record
+   #:sq-record
+   #:rg-record
    #:pg-record
    #:add-pg-record
 
@@ -168,7 +171,10 @@
    #:subst-sort-order
    #:subst-group-order
 
-   ;; Utiltiies
+   ;; Utilities
+   #:with-bam
+   #:make-bam-input
+   #:make-bam-output
    #:view-sam
    #:flagstat)
   (:documentation "cl-sam is a Common Lisp toolkit for manipulation of
