@@ -360,7 +360,7 @@ which is the same order as they are presented in the SAM spec."
   (assert (stringp version) (version)
           "VERSION should be a string, but was ~a" version)
   (cons :hd (reverse (pairlis (valid-header-tags :hd)
-                              (list version sort-order)))))
+                              (list version sort-order "none")))))
 
 (defun sq-record (seq-name seq-length &key assembly-identity seq-md5 seq-uri
                   seq-species)
@@ -373,15 +373,17 @@ which is the same order as they are presented in the SAM spec."
                  seq-species))
 
 (defun rg-record (identity sample &key library description
-                  (platform-unit :lane) insert-size
+                  (platform-unit :lane) (insert-size 0)
                   sequencing-centre sequencing-date platform-tech)
   "Returns a new RG record."
   (assert (stringp identity) (identity)
           "IDENTITY should be a string, but was ~a" identity)
   (assert (stringp sample) (sample)
           "SAMPLE should be a string, but was ~a" sample)
-  (assert (and (integerp insert-size) (plusp insert-size)) (insert-size)
-          "INSERT-SIZE should be a positive integer, but was ~a" insert-size)
+  (assert (and (integerp insert-size) (or (zerop insert-size)
+                                          (plusp insert-size))) (insert-size)
+          "INSERT-SIZE should be zero or a positive integer, but was ~a"
+          insert-size)
   (header-record :rg identity sample library description platform-unit
                  insert-size sequencing-centre sequencing-date
                  platform-tech))
