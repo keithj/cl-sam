@@ -583,7 +583,9 @@ generated sequential integer IDs, starting at 0. PP links are also
 updated. NEW-RECORD must have its PP field set by the caller."
   (multiple-value-bind (hd sq rg pg)
       (partition-by-type (list header))
-    (nconc hd sq rg (update-pg-records pg new-record))))
+    (declare (ignore sq))
+    (nconc hd (header-records header :sq) ; use SQ records in original order
+           rg (update-pg-records pg new-record))))
 
 (defun update-pg-records (current-records new-record)
   "Returns a copy of CURRENT-RECORDS with NEW-RECORD added."
