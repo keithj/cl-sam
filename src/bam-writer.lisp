@@ -19,6 +19,14 @@
 
 (in-package :sam)
 
+(defun make-bam-output (bam)
+  "Returns a consumer function that accepts an argument of a BAM
+record and writes it to BAM output stream BAM. The standard consumer
+interface function CONSUME may be used in operations on the returned
+consumer."
+  (lambda (aln)
+    (write-alignment bam aln)))
+
 (defun write-bam-magic (bgzf &key (compress t))
   "Writes the BAM magic number to the handle BGZF."
   (write-bytes bgzf *bam-magic* (length *bam-magic*) :compress compress))

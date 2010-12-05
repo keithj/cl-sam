@@ -19,127 +19,16 @@
 
 (in-package :sam)
 
-(defmacro with-bam ((var (&optional header num-refs ref-meta) filespec
-                         &rest args &key (compress t) (null-padding 0)
-                         &allow-other-keys)
-                    &body body)
-  "Evaluates BODY with VAR bound to a newly opened BAM iterator on
-pathname designator FILESPEC. The direction (:input versus :output) is
-determined by the stream-opening arguments in ARGS.
-
-On reading, HEADER, NUM-REFS and REF-META will be automatically bound
-to the BAM file metadata i.e. the metadata are read automatically and
-the iterator positioned before the first alignment record.
-
-On writing, HEADER, NUM-REFS and REF-META should be bound to
-appropriate values for the BAM file metadata, which will be
-automatically written to the underlying stream.
-
-The COMPRESS and NULL-PADDING keyword arguments are only applicable on
-writing where they control whether the header block should be
-compressed and whether the header string should be padded with nulls
-to allow space for expansion.
-
-For example:
-
-To count all records in a BAM file:
-
-;;; (with-bam (in (header) \"in.bam\")
-;;;   (declare (ignore header))
-;;;   (loop
-;;;      while (has-more-p in)
-;;;      count (next in)))
-
-To copy only records with a mapping quality of >= 30 to another BAM
-file:
-
-;;; (with-bam (in (h n r) \"in.bam\")
-;;;   (with-bam (out (h n r) \"out.bam\" :direction :output)
-;;;     (let ((q30 (discarding-if (lambda (x)
-;;;                                 (< (mapping-quality x) 30)) in)))
-;;;       (loop
-;;;          while (has-more-p q30)
-;;;          do (consume out (next q30))))))"
-  (with-gensyms (bgzf)
-    (let ((default-header (with-output-to-string (s)
-                            (write-sam-header
-                             `((:HD (:VN . ,*sam-version*))) s))))
-      `(with-bgzf (,bgzf ,filespec ,@(remove-key-values
-                                      '(:compress :null-padding) args))
-         ,@(if (search '(:direction :output) args)
-               `((write-bam-meta ,bgzf
-                                 ,(or header default-header)
-                                 ,(or num-refs 0) ,ref-meta
-                                 :compress ,compress
-                                 :null-padding ,null-padding)
-                 (let ((,var (make-bam-output ,bgzf)))
-                   ,@body))
-               `((multiple-value-bind (,@(when header `(,header))
-                                       ,@(when num-refs `(,num-refs))
-                                       ,@(when ref-meta `(,ref-meta)))
-                     (read-bam-meta ,bgzf)
-                   ,@(cond (ref-meta
-                            `((declare (ignorable ,header ,num-refs))))
-                           (num-refs
-                            `((declare (ignorable ,header)))))
-                   (let ((,var (make-bam-input ,bgzf)))
-                     ,@body))))))))
-
-(defun make-bam-input (bam)
-  "Returns a generator function that returns BAM alignment records for
-BAM stream BAM. The standard generator interface functions NEXT and
-HAS-MORE-P may be used in operations on the returned generator.
-
-For example:
-
-To count all records in a BAM file:
-
-;;; (with-bgzf (bam \"in.bam\")
-;;;   (read-bam-meta bam)
-;;;   (let ((in (make-bam-input bam)))
-;;;     (loop
-;;;        while (has-more-p in)
-;;;        count (next in))))
-
-To copy only records with a mapping quality of >= 30 to another BAM
-file:
-
-;;; (with-bgzf (bam-in \"in.bam\")
-;;;   (with-bgzf (bam-out \"out.bam\" :direction :output)
-;;;     (multiple-value-bind (header num-refs ref-meta)
-;;;         (read-bam-meta bam-in)
-;;;       (write-bam-meta bam-out header num-refs ref-meta))
-;;;     (let ((fn (discarding-if (lambda (x)
-;;;                                (< (mapping-quality x) 30))
-;;;                              (make-bam-input bam-in))))
-;;;       (loop
-;;;          while (has-more-p fn)
-;;;          do (write-alignment bam-out (next fn))))))"
-  (let ((current (read-alignment bam)))
-    (defgenerator
-        (more (not (null current)))
-        (next (prog1
-                  current
-                (setf current (read-alignment bam)))))))
-
-(defun make-bam-output (bam)
-  "Returns a consumer function that accepts an argument of a BAM
-record and writes it to BAM output stream BAM. The standard consumer
-interface function CONSUME may be used in operations on the returned
-consumer."
-  (lambda (aln)
-    (write-alignment bam aln)))
-
 (defun repair-mapping-flags (aln)
   "Returns alignment ALN if it has correct mapped-proper-pair,
 query-mapped and mate-mapped flags, or a modified copy with fixed
 flags. Also sets the user tag ZF:I:<original flag> if the flags are
 changed.
 
-Alignments produced by the BWA have been observed to contain invalid
-flags. This is caused by BWA creating mappings that overhang the end
-of the reference. The underlying cause is reference concatenation in
-the Burrows-Wheeler index.
+Alignments produced by the BWA aligner have been observed to contain
+invalid flags. This is caused by BWA creating mappings that overhang
+the end of the reference. The underlying cause is reference
+concatenation in the Burrows-Wheeler index.
 
 This function attempts to fix invalid mapped-proper-pair flags in
 cases where query-unmapped and/or mate-unmapped flags are set. Such
@@ -158,3 +47,60 @@ counts when using samtools flagstat or {defun flagstat} ."
             :tag-values (acons :zf flag (alignment-tag-values aln))))
           (t
            aln))))
+
+(defun generate-bam-file (filespec &key (num-refs 10) (ref-length 1000)
+                          (start 0) end (step-size 10)
+                          (read-length 50) (insert-length 250)
+                          (mapping-quality 50))
+  "Writes a very uniform BAM file to the file denoted by pathname
+designator FILESPEC, or testing purposes."
+  (let* ((tmp (tmp-pathname))
+         (end (or end ref-length))
+         (read-group "generated_group")
+         (ref-meta (loop
+                      for i from 0 below num-refs
+                      collect (list i (format nil "ref_~d" i) ref-length)))
+         (header (with-output-to-string (s)
+                   (write-sam-header
+                    (apply #'list
+                           (hd-record :version "1.3" :sort-order :coordinate)
+                           (rg-record read-group "generated")
+                           (loop
+                              for m in ref-meta
+                              collect (sq-record (second m) (third m)))) s))))
+    (with-bam (bam (header num-refs ref-meta) tmp :direction :output
+                   :if-exists :supersede)
+      (do ((i start (+ step-size i)))
+          ((>= (+ i insert-length (* 2 read-length)) end) filespec)
+        (let ((seq1 (make-string read-length :initial-element #\a))
+              (seq2 (make-string read-length :initial-element #\t))
+              (quality (make-string read-length :initial-element #\e))
+              (pos1 i)
+              (pos2 (+ i read-length insert-length))
+              (cigar (list (cons :m read-length))))
+          (consume bam (make-alignment-record 
+                        (format nil "r~9,'0d" i) seq1
+                        (flag-bits 0 :sequenced-pair :first-in-pair
+                                   :mapped-proper-pair
+                                   :query-forward :mate-reverse
+                                   :query-mapped :mate-mapped)
+                        :quality-str quality
+                        :reference-id 0 :mate-reference-id 0
+                        :alignment-pos pos1 :mate-alignment-pos pos2
+                        :insert-length insert-length
+                        :mapping-quality mapping-quality :cigar cigar
+                        :tag-values `((:rg . ,read-group) (:nm . 0))))
+          (consume bam (make-alignment-record 
+                        (format nil "r~9,'0d" i) seq2
+                        (flag-bits 0 :sequenced-pair :second-in-pair
+                                   :mapped-proper-pair
+                                   :query-reverse :mate-forward
+                                   :query-mapped :mate-mapped)
+                        :quality-str quality
+                        :reference-id 0 :mate-reference-id 0
+                        :alignment-pos pos2 :mate-alignment-pos pos1
+                        :insert-length insert-length
+                        :mapping-quality mapping-quality :cigar cigar
+                        :tag-values `((:rg . ,read-group) (:nm . 0)))))))
+    (sort-bam-file tmp filespec)
+    filespec))

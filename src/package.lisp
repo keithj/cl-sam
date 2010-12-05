@@ -74,7 +74,12 @@
    #:write-reference-meta
    #:write-bam-meta
    #:write-alignment
-   
+
+   ;; BAM IO
+   #:with-bam
+   #:make-bam-input
+   #:make-bam-output
+
    ;; Low-level BAM API
    #:reference-id
    #:alignment-position
@@ -126,13 +131,15 @@
    #:define-alignment-tag
    #:alignment-tag-documentation
 
-   #:repair-mapping-flags
-
    ;; BAM sorting
    #:sort-bam-file
    #:alignment-record<
    #:alignment-name<
    #:alignment-strand<
+
+   ;; BAM indexing
+   #:with-bam-index
+   #:read-bam-index
 
    ;; Low-level SAM API
    #:*sam-version*
@@ -172,11 +179,10 @@
    #:subst-group-order
 
    ;; Utilities
-   #:with-bam
-   #:make-bam-input
-   #:make-bam-output
    #:view-sam
-   #:flagstat)
+   #:flagstat
+   #:repair-mapping-flags
+   #:generate-bam-file)
   (:documentation "cl-sam is a Common Lisp toolkit for manipulation of
 DNA sequence alignment data stored in the Sequence Alignment/Map (SAM)
 format <http://samtools.sourceforge.net>. The SAM specficiation

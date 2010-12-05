@@ -19,11 +19,8 @@
 
 (in-package :sam)
 
-(defparameter *voffset-merge-distance* (expt 2 15)
-  "If two index chunks are this number of bytes or closer to each
-other, they should be merged.")
-
 (defun index-bam-file (filespec)
+  "Returns a new BAM-INDEX object, given pathname designator FILESPEC."
   (with-bgzf (bam filespec)
     (multiple-value-bind (header num-refs ref-meta)
         (read-bam-meta bam)
@@ -79,14 +76,6 @@ other, they should be merged.")
                                   (< cstart (aref iseq i)))
                          do (setf (aref iseq i) cstart)))))))
         (build-bam-index chunks intervals)))))
-
-(defun voffset-merge-p (voffset1 voffset2)
-  "Returns T if BGZF virtual offsets should be merged into a single
-range to save disk seeks."
-  (let ((coffset1 (bgzf-coffset voffset1))
-        (coffset2 (bgzf-coffset voffset2)))
-    (or (= coffset1 coffset2)
-        (< coffset1 (+ coffset2 *voffset-merge-distance*)))))
 
 (defun build-bam-index (chunks intervals)
   "Returns a new bam index given a hash-table CHUNKS of chunk vectors

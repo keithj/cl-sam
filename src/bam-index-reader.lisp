@@ -46,6 +46,14 @@
 ;;; containing the number of unmapped reads that have no reference
 ;;; and (or?) no coordinates. Your guess is as good as mine.
 
+(defmacro with-bam-index ((var filespec) &body body)
+  "Evaluates BODY with VAR bound to a BAM-INDEX read from file denoted
+by pathname designator FILESPEC."
+  (with-gensyms (stream)
+    `(with-open-file (,stream ,filespec :element-type 'octet)
+       (let ((,var (read-bam-index ,stream)))
+         ,@body))))
+
 (defun read-index-magic (stream)
   "Reads the BAI magic number from STREAM and returns T if it is valid
 or raises a {define-condition malformed-file-error} if not."
@@ -127,6 +135,7 @@ by increasing bin number."
                  (make-chunk :start start :end end))))
       (let* ((bin-num (read-bin-num))
              (num-chunks (read-num-chunks)))
+        ;; FIXME -- have a switch to merge chunks here, as they are created
         (make-bin :num bin-num
                   :chunks (loop
                              with chunks = (make-array num-chunks)

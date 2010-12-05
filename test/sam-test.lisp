@@ -27,6 +27,9 @@
                                (symbol-name (first x))))))
           (copy-tree header)))
 
+(defun header-equal (header1 header2)
+  (equal (canonical-header header1) (canonical-header header2)))
+
 (addtest (cl-sam-tests) valid-sam-version-p/1
   (ensure (valid-sam-version-p "1.0"))
   (ensure (valid-sam-version-p "1.3"))
@@ -144,15 +147,16 @@
 @PG	ID:x	PN:program a	VN:version 1.0	CL:run_program_a -a 1 -b 2
 @PG	ID:y	PN:program b	VN:version 1.0	CL:run_program_b -a 1 -b 2	PP:x")))
     ;; No PP, no ID clash
-    (ensure (equal
+    (ensure (header-equal
              '((:HD (:VN . "1.3"))
-               (:SQ (:SN . "AL096846") (:LN . 6490) (:SP . "Schizosaccharomyces pombe"))
+               (:SQ (:SN . "AL096846") (:LN . 6490)
+                (:SP . "Schizosaccharomyces pombe"))
                (:PG (:ID . "x") (:PN . "program a") (:VN . "version 1.0")
                 (:CL . "run_program_a -a 1 -b 2"))
                (:PG (:ID . "y") (:PN . "program b") (:VN . "version 1.0")
                 (:CL . "run_program_b -a 1 -b 2") (:PP . "x"))
-               (:PG (:ID . "z") (:CL . "run_program_c -a 1 -b 2") (:PN . "program c")
-                (:VN . "2.0")))
+               (:PG (:ID . "z") (:PN . "program c") (:VN . "2.0")
+                (:CL . "run_program_c -a 1 -b 2")))
              (add-pg-record
               header
               (pg-record "z"
@@ -161,15 +165,16 @@
                          :command-line "run_program_c -a 1 -b 2")))
             :report "No PP, no ID clash failed")
     ;; No PP, ID clash
-    (ensure (equal
+    (ensure (header-equal
              '((:HD (:VN . "1.3"))
-               (:SQ (:SN . "AL096846") (:LN . 6490) (:SP . "Schizosaccharomyces pombe"))
+               (:SQ (:SN . "AL096846") (:LN . 6490)
+                (:SP . "Schizosaccharomyces pombe"))
                (:PG (:ID . 0) (:PN . "program a") (:VN . "version 1.0")
                 (:CL . "run_program_a -a 1 -b 2"))
                (:PG (:ID . 1) (:PN . "program b") (:VN . "version 1.0")
                 (:CL . "run_program_b -a 1 -b 2") (:PP . 0))
-               (:PG (:ID . "2") (:CL . "run_program_c -a 1 -b 2") (:PN . "program c")
-                (:VN . "2.0")))
+               (:PG (:ID . "2")  (:PN . "program c") (:VN . "2.0")
+                (:CL . "run_program_c -a 1 -b 2")))
              (add-pg-record
               header
               (pg-record "x"
@@ -178,15 +183,16 @@
                          :command-line "run_program_c -a 1 -b 2")))
             :report "No PP, ID clash failed")
     ;; PP, no ID clash
-    (ensure (equal
+    (ensure (header-equal
              '((:HD (:VN . "1.3"))
-               (:SQ (:SN . "AL096846") (:LN . 6490) (:SP . "Schizosaccharomyces pombe"))
+               (:SQ (:SN . "AL096846") (:LN . 6490)
+                (:SP . "Schizosaccharomyces pombe"))
                (:PG (:ID . "x") (:PN . "program a") (:VN . "version 1.0")
                 (:CL . "run_program_a -a 1 -b 2"))
                (:PG (:ID . "y") (:PN . "program b") (:VN . "version 1.0")
                 (:CL . "run_program_b -a 1 -b 2") (:PP . "x"))
-               (:PG (:ID . "z") (:CL . "run_program_c -a 1 -b 2") (:PN . "program c")
-                (:PP . "y") (:VN . "2.0")))
+               (:PG (:ID . "z") (:PN . "program c") (:VN . "2.0") (:PP . "y")
+                (:CL . "run_program_c -a 1 -b 2")))
              (add-pg-record
               header
               (pg-record "z"
@@ -196,15 +202,16 @@
                          :previous-program "y")))
             :report "PP, no ID clash failed")
     ;; PP, ID clash
-    (ensure (equal
+    (ensure (header-equal
              '((:HD (:VN . "1.3"))
-               (:SQ (:SN . "AL096846") (:LN . 6490) (:SP . "Schizosaccharomyces pombe"))
+               (:SQ (:SN . "AL096846") (:LN . 6490)
+                (:SP . "Schizosaccharomyces pombe"))
                (:PG (:ID . 0) (:PN . "program a") (:VN . "version 1.0")
                 (:CL . "run_program_a -a 1 -b 2"))
                (:PG (:ID . 1) (:PN . "program b") (:VN . "version 1.0")
                 (:CL . "run_program_b -a 1 -b 2") (:PP . 0))
-               (:PG (:ID . "2") (:CL . "run_program_c -a 1 -b 2") (:PN . "program c")
-                (:PP . 1) (:VN . "2.0")))
+               (:PG (:ID . "2") (:PN . "program c") (:VN . "2.0")
+                (:PP . 1) (:CL . "run_program_c -a 1 -b 2")))
              (add-pg-record header
                             (pg-record "x"
                                        :program-name "program c"

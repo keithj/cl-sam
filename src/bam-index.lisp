@@ -31,6 +31,10 @@
                                       :initial-contents '(66 65 73 1))
   "The BAI index file magic header bytes.")
 
+(defparameter *voffset-merge-distance* (expt 2 15)
+  "If two index chunks are this number of bytes or closer to each
+other, they should be merged.")
+
 (defstruct bam-index
   "A BAM file index covering all the reference sequences in a BAM
 file."
@@ -120,17 +124,20 @@ BAM-INDEX."
   "Returns the BIN number BIN-NUM in REF-INDEX."
   (binary-search (ref-index-bins ref-index) bin-num :key #'bin-num))
 
+(defun empty-bin-p (bin)
+  "Returns T if BIN contains no chunks, or NIL otherwise."
+  (zerop (length (bin-chunks bin))))
+
 (defun bin-chunk (bin chunk-num)
   "Returns the chunk number CHUNK-NUM in BIN."
   (svref (bin-chunks bin) chunk-num))
 
 (defun region-to-bins (start end)
-  "Returns a bit vector with the bits for relevant bins set, given
-a 0-based range.
-
-Each bin may span 2^29, 2^26, 2^23, 2^20, 2^17 or 2^14 bp. Bin 0 spans
-a 512 Mbp region, bins 1-8 span 64 Mbp, 9-72 8 Mbp, 73-584 1 Mbp,
-585-4680 128 Kbp and bins 4681-37449 span 16 Kbp regions."
+  "Returns a bit vector with the bits for relevant bins set, given a
+0-based range. Each bin may span 2^29, 2^26, 2^23, 2^20, 2^17 or 2^14
+bp. Bin 0 spans a 512 Mbp region, bins 1-8 span 64 Mbp, 9-72 8 Mbp,
+73-584 1 Mbp, 585-4680 128 Kbp and bins 4681-37449 span 16 Kbp
+regions."
   (check-arguments (<= 0 start end) (start end) "must satisfy (<= 0 start end)")
   ;; Offsets calculated thus:
   ;; (mapcar (lambda (x)
@@ -141,7 +148,7 @@ a 512 Mbp region, bins 1-8 span 64 Mbp, 9-72 8 Mbp, 73-584 1 Mbp,
       (let ((end (1- end)))
         (loop
            for  shift in '( -14 -17 -20 -23 -26)
-           for offset in '(4681 585  73   9   1)
+           for offset in '(4681 585  73   9   1) ; tree deepening boundaries
            do (loop
                  for k from (+ offset (ash start -14))
                  to (+ offset (ash end shift))
@@ -169,12 +176,88 @@ a 512 Mbp region, bins 1-8 span 64 Mbp, 9-72 8 Mbp, 73-584 1 Mbp,
 in the BAM linear index."
   (floor coord +linear-bin-size+))
 
-(defun find-bins (bam-index ref-num start end)
-  (let ((bin-nums (region-to-bins start end))
-        (bins (ref-index-bins (ref-index bam-index ref-num))))
-    (loop
-       for i from 0 below +max-num-bins+
-       for bin = (when (plusp (sbit bin-nums i))
-                   (binary-search bins i :key #'bin-num))
-       when bin
-       collect bin)))
+(defun find-bins (index ref-num start end)
+  "Returns a list of all the bins for reference REF-NUM in INDEX,
+between reference positions START and END."
+  (let ((num-refs (length (bam-index-refs index))))
+    (check-arguments (< -1 ref-num num-refs) (ref-num)
+                     "must satisfy (<= 0 ref-num ~d)" (1- num-refs))
+    (check-arguments (<= start end) (start end)
+                     "must satisfy (<= start end)"))
+ (let ((bin-nums (region-to-bins start end))
+       (bins (ref-index-bins (ref-index index ref-num))))
+   (loop
+      for i from 0 below +max-num-bins+
+      for bin = (when (plusp (sbit bin-nums i))
+                  (binary-search bins i :key #'bin-num))
+      when (and bin (not (empty-bin-p bin)))
+      collect bin)))
+
+(defun adjacentp (chunk1 chunk2)
+  "Returns T if BAM index CHUNK1 and CHUNK2 are adjacent. In this
+context this means that they are sequential in a file stream and close
+enough together for it to be more efficient to continue reading across
+the intervening bytes, rather than seeking."
+  (check-arguments (<= (chunk-end chunk1) (chunk-start chunk2))
+                   (chunk1 chunk2)
+                   "chunk1 must end at or before the start of chunk2")
+  (voffset-merge-p (chunk-end chunk1) (chunk-start chunk2)))
+
+(defun merge-chunks (chunks)
+  "Returns a new list of BAM index chunks created by merging members
+of list CHUNKS that are {defun adjacentp} ."
+  (if (endp (rest chunks))
+      chunks
+      (let ((x (copy-chunk (first chunks)))
+            merged)
+        (dolist (y (rest chunks) (nreverse (cons x merged)))
+          (cond ((adjacentp x y)
+                 (setf (chunk-end x) (chunk-end y)))
+                (t
+                 (push x merged)
+                 (setf x (copy-chunk y))))))))
+
+(defun voffset-merge-p (voffset1 voffset2)
+  "Returns T if BGZF virtual offsets are close enough to save disk
+seeks. Continuing to read from the current position may be faster than
+seeking forward a short distance."
+  (let ((coffset1 (bgzf-coffset voffset1))
+        (coffset2 (bgzf-coffset voffset2)))
+    (check-arguments (<= coffset1 coffset2) (voffset1 voffset2)
+                     "the first virtual offset must be at or before the second")
+    (>= (+ coffset1 *voffset-merge-distance*) coffset2)))
+
+(defun make-bam-chunk-queue (index ref-num start end)
+  "Returns a queue of merged chunks for reference REF-NUM in INDEX,
+between reference positions START and END."
+  (queue-append (make-queue) (merge-chunks
+                              (sort (mapcan (lambda (bin)
+                                              (coerce (bin-chunks bin) 'list))
+                                            (find-bins index ref-num start end))
+                                    #'< :key #'chunk-start))))
+
+(defun make-bam-chunk-input (bam chunks end)
+  "Returns a generator function that uses a queue of index CHUNKS to
+iterate over records in BAM stream BAM. The standard generator
+interface functions, CURRENT, NEXT and HAS-MORE-P may be used in
+operations on the returned generator."
+  (let ((chunk (queue-dequeue chunks))
+        (current (read-alignment bam)))
+    (defgenerator
+        (more (not (null current)))
+        (next (prog1
+                  current
+                (if (null chunk)
+                    (setf current nil)
+                    (let ((aln (read-alignment bam)))
+                      (setf current (cond ((null aln)
+                                           nil)
+                                          ((> (alignment-position aln) end)
+                                           nil)
+                                          (t
+                                           aln)))
+                      (when (>= (bgzf-tell bam) (chunk-end chunk))
+                        (let ((next (queue-dequeue chunks)))
+                          (when next
+                            (bgzf-seek bam (chunk-start next)))
+                          (setf chunk next))))))))))

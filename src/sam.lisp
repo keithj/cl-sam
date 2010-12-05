@@ -359,6 +359,7 @@ which is the same order as they are presented in the SAM spec."
   "Returns a new HD record."
   (assert (stringp version) (version)
           "VERSION should be a string, but was ~a" version)
+  ;; (:vn :so :go)
   (cons :hd (reverse (pairlis (valid-header-tags :hd)
                               (list version sort-order "none")))))
 
@@ -369,6 +370,7 @@ which is the same order as they are presented in the SAM spec."
           "SEQ-NAME should be a string, but was ~a" seq-name)
   (assert (and (integerp seq-length) (plusp seq-length)) (seq-length)
           "SEQ-LENGTH should be a positive integer, but was ~a" seq-length)
+  ;; (:sn :ln :as :m5 :ur :sp)
   (header-record :sq seq-name seq-length assembly-identity seq-md5 seq-uri
                  seq-species))
 
@@ -384,9 +386,9 @@ which is the same order as they are presented in the SAM spec."
                                           (plusp insert-size))) (insert-size)
           "INSERT-SIZE should be zero or a positive integer, but was ~a"
           insert-size)
+  ;; (:id :sm :lb :ds :pu :pi :cn :dt :pl)
   (header-record :rg identity sample library description platform-unit
-                 insert-size sequencing-centre sequencing-date
-                 platform-tech))
+                 insert-size sequencing-centre sequencing-date platform-tech))
 
 (defun pg-record (identity &key program-name program-version previous-program
                   command-line)
@@ -395,8 +397,9 @@ which is the same order as they are presented in the SAM spec."
           "IDENTITY should be a string, but was ~a" identity)
   (assert (stringp program-version) (program-version)
           "PROGRAM-VERSION should be a string, but was ~a" program-version)
-  (header-record :pg identity command-line program-name previous-program
-                 program-version))
+  ;; (:id :pn :vn :pp :cl)
+  (header-record :pg identity program-name program-version previous-program
+                 command-line))
 
 (defun merge-sam-headers (&rest headers)
   "Returns a new SAM header that is the result of merging
