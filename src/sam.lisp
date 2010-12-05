@@ -30,9 +30,9 @@
   record type.")
 (defparameter *valid-header-tags*
   (pairlis *valid-header-types* '((:vn :so :go)
-                                  (:sn :ln :as :m5 :sp :ur)
-                                  (:id :cn :ds :dt :lb :pi :pl :pu :sm)
-                                  (:id :cl :pn :pp :vn)
+                                  (:sn :ln :as :m5 :ur :sp)
+                                  (:id :sm :lb :ds :pu :pi :cn :dt :pl)
+                                  (:id :pn :vn :pp :cl)
                                   nil))
   "A mapping that describes the valid tags for each SAM header record
   type.")
@@ -597,7 +597,8 @@ updated. NEW-RECORD must have its PP field set by the caller."
          (num-ids (iota (length current-records)))
          (current-pps (mapcar (lambda (rec)
                                 (header-value rec :pp)) current-records)))
-    (check-arguments (or (null new-pp) (find new-pp current-ids :test #'string=))
+    (check-arguments (or (null new-pp) (find new-pp current-ids
+                                             :test #'string=))
                      (new-record)
                      "previous program ~s not found" new-pp)
     (labels ((map-id (id)
