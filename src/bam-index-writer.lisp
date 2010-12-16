@@ -81,7 +81,7 @@
   "Returns a new bam index given a hash-table CHUNKS of chunk vectors
 keyed on ref-num and bin-num and a hash-table INTERVALS of interval
 vectors, keyed on ref-num."
-  (let* ((num-refs (hash-table-size intervals))
+  (let* ((num-refs (hash-table-count intervals))
          (bins (make-hash-table :size num-refs))
          (ref-indices (make-array num-refs)))
     (loop
@@ -106,3 +106,76 @@ vectors, keyed on ref-num."
                              #'< :key #'bin-num)
                  :intervals (gethash ref-num intervals))))
     (make-bam-index :refs ref-indices)))
+
+(defun write-index-magic (stream)
+  (write-sequence *bam-index-magic* stream))
+
+(defgeneric write-bam-index (index stream)
+  (:method ((index bam-index) stream)
+    (let ((bytes (make-array 8 :element-type 'octet :initial-element 0)))
+      (write-index-magic stream)
+      (%write-int32 (length (bam-index-refs index)) bytes stream)
+      (+ 4 4 (reduce #'+ (map 'vector (lambda (ref)
+                                        (write-ref-index ref stream))
+                              (bam-index-refs index))))))
+  (:method ((index samtools-bam-index) stream)
+    (let ((bytes (make-array 8 :element-type 'octet :initial-element 0)))
+      (write-index-magic stream)
+      (%write-int32 (length (bam-index-refs index)) bytes stream)
+      (+ 4 4 (reduce #'+ (map 'vector (lambda (ref)
+                                        (write-ref-index ref stream))
+                              (bam-index-refs index)))
+         (length (%write-int64
+                  (samtools-bam-index-unassigned index) bytes stream))))))
+
+(defgeneric write-ref-index (ref-index stream)
+  (:method ((ref-index ref-index) stream)
+    (let ((bytes (make-array 4 :element-type 'octet :initial-element 0)))
+      (%write-int32 (length (ref-index-bins ref-index)) bytes stream)
+      (+ 4 (write-binning-index (ref-index-bins ref-index) stream)
+         (write-linear-index (ref-index-intervals ref-index) stream))))
+  (:method ((ref-index samtools-ref-index) stream)
+    (let ((bytes (make-array 8 :element-type 'octet :initial-element 0)))
+      (%write-int32 (1+ (length (ref-index-bins ref-index))) bytes stream)
+      (+ 4 (write-binning-index (ref-index-bins ref-index) stream)
+         (write-bin
+          (let ((chunk1 (make-chunk
+                         :start (samtools-ref-index-start ref-index)
+                         :end (samtools-ref-index-end ref-index)))
+                (chunk2 (make-chunk
+                         :start (samtools-ref-index-mapped ref-index)
+                         :end (samtools-ref-index-unmapped ref-index))))
+            (make-bin :num +samtools-kludge-bin+
+                      :chunks (make-array 2 :initial-contents
+                                          (list chunk1 chunk2)))) stream)
+         (write-linear-index (ref-index-intervals ref-index) stream)))))
+
+(defun write-binning-index (bins stream)
+  (reduce #'+ (map 'vector (lambda (bin)
+                             (write-bin bin stream)) bins)))
+
+(defun write-bin (bin stream)
+  (let ((bytes (make-array 8 :element-type 'octet))
+        (num-chunks (length (bin-chunks bin))))
+    (flet ((write-chunk (chunk)
+             (%write-int64 (chunk-start chunk) bytes stream)
+             (%write-int64 (chunk-end chunk) bytes stream )))
+      (%write-int32 (bin-num bin) bytes stream)
+      (%write-int32 num-chunks bytes stream)
+      (map nil #'write-chunk (bin-chunks bin))
+      (+ 4 4 (* 16 num-chunks)))))
+
+(defun write-linear-index (intervals stream)
+  (let ((bytes (make-array 8 :element-type 'octet))
+        (num-intervals (length intervals)))
+    (flet ((write-interval (interval)
+             (%write-int64 interval bytes stream)))
+      (%write-int32 num-intervals bytes stream)
+      (map nil #'write-interval intervals))
+    (+ 4 (* 8 num-intervals))))
+
+(defun %write-int32 (n buffer stream)
+  (write-sequence (encode-int32le n buffer) stream :end 4))
+
+(defun %write-int64 (n buffer stream)
+  (write-sequence (encode-int64le n buffer) stream))

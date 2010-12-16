@@ -140,6 +140,26 @@
    ;; BAM indexing
    #:with-bam-index
    #:read-bam-index
+   #:write-bam-index
+   #:index-bam-file
+   #:find-bins
+
+   ;; BAM index
+   #:bam-index
+   #:ref-index
+   #:bin
+   #:chunk
+   #:empty-bin-p
+   #:bam-index-refs
+   #:ref-index-num
+   #:ref-index-bins
+   #:ref-index-intervals
+   #:bin-num
+   #:bin-chunks
+   #:chunk-start
+   #:chunk-end
+   #:ref-index-bin
+   #:bin-chunk
 
    ;; Low-level SAM API
    #:*sam-version*
