@@ -97,12 +97,14 @@ Optional:
 end of the header string, as allowed by the SAM spec. This is useful
 for creating slack space so that BAM headers may be edited in place."
   (+ (write-bam-magic bgzf :compress compress)
-     (write-bam-header bgzf header :compress compress
-                       :null-padding null-padding)
-
-     ;; Unless compressing, flush here to move to the next bgz member,
-     ;; leaving the magic number and header uncompressed.
-     
+     (prog1
+         (write-bam-header bgzf header :compress compress
+                           :null-padding null-padding)
+       ;; Unless compressing, flush here to move to the next bgz
+       ;; member, leaving the magic number and header uncompressed and
+       ;; in their own block.
+       (unless compress
+         (bgzf-flush bgzf :compress compress :append-eof nil)))
      (write-num-references bgzf num-refs)
      (loop
         for (nil ref-name ref-length) in ref-meta
