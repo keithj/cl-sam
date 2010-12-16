@@ -120,12 +120,13 @@ Rest:
       (when ,var
         (bgzf-close ,var)))))
 
-(defun bgzf-open (filespec &rest args &key compression &allow-other-keys)
+(defun bgzf-open (bgzfspec &rest args &key compression &allow-other-keys)
   "Opens a block gzip file for reading or writing.
 
 Arguments:
 
-- filespec (pathname designator): The file to open.
+- bgzfspec (pathname designator or bgzf object): The file to open or
+an open bgzf object (which is returned unmodified).
 
 Key:
 
@@ -137,11 +138,15 @@ an :element-type argument will be ignored as the type is always octet.
 Returns:
 
 - A BGZF structure."
-  (let ((stream (apply #'open filespec :element-type 'octet
-                       (remove-key-values '(:element-type :compression) args))))
-    (if compression
-        (make-bgzf :stream stream :pathname filespec :compression compression)
-        (make-bgzf :stream stream :pathname filespec))))
+  (typecase bgzfspec
+    (bgzf bgzfspec)
+    (t (let ((stream (apply #'open bgzfspec :element-type 'octet
+                            (remove-key-values '(:element-type
+                                                 :compression) args))))
+         (if compression
+             (make-bgzf :stream stream :pathname bgzfspec
+                        :compression compression)
+             (make-bgzf :stream stream :pathname bgzfspec))))))
 
 (defun bgzf-close (bgzf)
   "Closes an open block gzip file.
@@ -153,10 +158,10 @@ Arguments:
 Returns:
 
 - T on success."
-  (let ((stream (bgzf-stream bgzf)))
-    (when (output-stream-p stream)
-       (bgzf-flush bgzf))
-    (close stream)))
+    (let ((stream (bgzf-stream bgzf)))
+      (when (output-stream-p stream)
+        (bgzf-flush bgzf))
+      (close stream)))
 
 (defun bgzf-open-p (bgzf)
   (open-stream-p (bgzf-stream bgzf)))

@@ -47,6 +47,32 @@
     (ensure (bgzf-close bgzf)
             :report "failed to close handle")))
 
+(addtest (cl-sam-tests) bam-open/close/2
+  (let* ((filespec (merge-pathnames "data/c1215-name.bam"))
+         (bgzfspec (bgzf-open filespec))
+         (bgzf (bgzf-open bgzfspec)))
+    (ensure (bgzf-open-p bgzf)
+            :report "expected an open handle")
+    (ensure (bgzf-close bgzf)
+            :report "failed to close handle")))
+
+(addtest (cl-sam-tests) bam-open-close/3
+  (let* ((filespec (merge-pathnames "data/c1215-name.bam"))
+         (bgzf1 (bgzf-open filespec))
+         (halfway 10000))
+    (read-bam-meta bgzf1)
+    (loop
+       repeat halfway
+       do (read-alignment bgzf1))
+    (let* ((bgzf2 (bgzf-open bgzf1)) ; reopen at arbitrary position
+           (n (loop
+                 for aln = (read-alignment bgzf2)
+                 while aln
+                 count aln)))
+      (ensure (= halfway n)
+              :report "Expected ~d, but found ~d"
+              :arguments (halfway n)))))
+
 (addtest (cl-sam-tests) bgzf-stream-read-byte/1
   (with-open-file (raw (merge-pathnames "data/c1215-name.dat")
                        :element-type 'octet)
