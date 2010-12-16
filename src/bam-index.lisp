@@ -40,6 +40,11 @@ other, they should be merged.")
 file."
   (refs (make-array 0) :type simple-vector))
 
+(defstruct (samtools-bam-index (:include bam-index))
+  "A samtools-specific index containing extra, undocumented data:
+ - unassigned: number of unmapped reads not assigned to a reference"
+  (unassigned 0 :type (unsigned-byte 64)))
+
 (defstruct (ref-index (:print-object print-ref-index))
   "An index for a single reference sequence. An index is composed of a
 vector of bins (the binning index) and a vector of intervals (the
@@ -52,13 +57,13 @@ projection of reads from all bins onto a single vector."
              :type (simple-array fixnum (*))))
 
 (defstruct (samtools-ref-index (:include ref-index))
-  "A samtools specific reference index containing extra,
+  "A samtools-specific reference index containing extra,
 undocumented data:
 
  - start: the start offset of the reference
  - end: the end offset of the reference
  - mapped: number of reads mapped to the reference
- - unmapped: number of unmapped read assigned to the reference by
+ - unmapped: number of unmapped reads assigned to the reference by
    magic"
   (start 0 :type (unsigned-byte 64))
   (end 0 :type (unsigned-byte 64))
