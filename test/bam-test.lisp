@@ -47,6 +47,32 @@
     (ensure (bgzf-close bgzf)
             :report "failed to close handle")))
 
+(addtest (cl-sam-tests) bam-open/close/2
+  (let* ((filespec (merge-pathnames "data/c1215-name.bam"))
+         (bgzfspec (bgzf-open filespec))
+         (bgzf (bgzf-open bgzfspec)))
+    (ensure (bgzf-open-p bgzf)
+            :report "expected an open handle")
+    (ensure (bgzf-close bgzf)
+            :report "failed to close handle")))
+
+(addtest (cl-sam-tests) bam-open-close/3
+  (let* ((filespec (merge-pathnames "data/c1215-name.bam"))
+         (bgzf1 (bgzf-open filespec))
+         (halfway 10000))
+    (read-bam-meta bgzf1)
+    (loop
+       repeat halfway
+       do (read-alignment bgzf1))
+    (let* ((bgzf2 (bgzf-open bgzf1)) ; reopen at arbitrary position
+           (n (loop
+                 for aln = (read-alignment bgzf2)
+                 while aln
+                 count aln)))
+      (ensure (= halfway n)
+              :report "Expected ~d, but found ~d"
+              :arguments (halfway n)))))
+
 (addtest (cl-sam-tests) bgzf-stream-read-byte/1
   (with-open-file (raw (merge-pathnames "data/c1215-name.dat")
                        :element-type 'octet)
@@ -180,7 +206,7 @@
                        (tmp-pathname :tmpdir (merge-pathnames "data")
                                      :basename "bam-roundtrip-"))))
     (with-bgzf (in in-filespec :direction :input)
-      (with-bgzf (out out-filespec :direction :output)
+      (with-bgzf (out out-filespec :direction :output :if-exists :supersede)
         (multiple-value-bind (header num-refs ref-meta)
             (read-bam-meta in)
           (write-bam-meta out header num-refs ref-meta)
@@ -311,3 +337,12 @@
         (sorted (merge-pathnames "data/c1215-coordinate.bam")))
     (sort-bam-file unsorted sorted :sort-order :coordinate :buffer-size 10000)
     (ensure (fad:file-exists-p sorted))))
+
+(addtest (cl-sam-tests) valid-read-name-p/1
+  (ensure (sam::valid-read-name-p "a"))
+  (ensure (not (sam::valid-read-name-p "@")))
+  (ensure (not (sam::valid-read-name-p "a@")))
+  (ensure (sam::valid-read-name-p "a"))
+  (ensure (sam::valid-read-name-p (make-string 255 :initial-element #\a)))
+  (ensure (not (sam::valid-read-name-p (make-string 256
+                                                    :initial-element #\a)))))

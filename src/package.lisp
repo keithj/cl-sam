@@ -74,7 +74,12 @@
    #:write-reference-meta
    #:write-bam-meta
    #:write-alignment
-   
+
+   ;; BAM IO
+   #:with-bam
+   #:make-bam-input
+   #:make-bam-output
+
    ;; Low-level BAM API
    #:reference-id
    #:alignment-position
@@ -126,22 +131,57 @@
    #:define-alignment-tag
    #:alignment-tag-documentation
 
-   #:repair-mapping-flags
-
    ;; BAM sorting
    #:sort-bam-file
    #:alignment-record<
    #:alignment-name<
    #:alignment-strand<
 
+   ;; BAM indexing
+   #:with-bam-index
+   #:read-bam-index
+   #:write-bam-index
+   #:index-bam-file
+   #:find-bins
+
+   ;; BAM index
+   #:bam-index
+   #:ref-index
+   #:bin
+   #:chunk
+   #:empty-bin-p
+   #:bam-index-refs
+   #:ref-index-num
+   #:ref-index-bins
+   #:ref-index-intervals
+   #:bin-num
+   #:bin-chunks
+   #:chunk-start
+   #:chunk-end
+   #:ref-index-bin
+   #:bin-chunk
+
    ;; Low-level SAM API
    #:*sam-version*
+   #:valid-sam-version-p
+   #:valid-reference-name-p
    #:make-sam-header
    #:make-header-record
+   #:header-records
    #:header-type
    #:header-tags
+   #:header-value
    #:ensure-mandatory-header-tags
    #:ensure-valid-header-tags
+   #:ensure-valid-programs
+   #:previous-programs
+   #:last-programs
+
+   #:hd-record
+   #:sq-record
+   #:rg-record
+   #:pg-record
+   #:add-pg-record
 
    #:write-sam-header
    #:write-header-record
@@ -158,9 +198,11 @@
    #:subst-sort-order
    #:subst-group-order
 
-   ;; Utiltiies
+   ;; Utilities
    #:view-sam
-   #:flagstat)
+   #:flagstat
+   #:repair-mapping-flags
+   #:generate-bam-file)
   (:documentation "cl-sam is a Common Lisp toolkit for manipulation of
 DNA sequence alignment data stored in the Sequence Alignment/Map (SAM)
 format <http://samtools.sourceforge.net>. The SAM specficiation

@@ -46,6 +46,14 @@
 ;;; containing the number of unmapped reads that have no reference
 ;;; and (or?) no coordinates. Your guess is as good as mine.
 
+(defmacro with-bam-index ((var filespec) &body body)
+  "Evaluates BODY with VAR bound to a BAM-INDEX read from file denoted
+by pathname designator FILESPEC."
+  (with-gensyms (stream)
+    `(with-open-file (,stream ,filespec :element-type 'octet)
+       (let ((,var (read-bam-index ,stream)))
+         ,@body))))
+
 (defun read-index-magic (stream)
   "Reads the BAI magic number from STREAM and returns T if it is valid
 or raises a {define-condition malformed-file-error} if not."
@@ -59,14 +67,19 @@ or raises a {define-condition malformed-file-error} if not."
 (defun read-bam-index (stream)
   "Reads a BAM (.bai) index from STREAM."
   (when (read-index-magic stream)
-    (let ((bytes (make-array 4 :element-type 'octet :initial-element 0)))
-      (read-sequence bytes stream)
-      (let ((num-refs (decode-int32le bytes)))
-        (loop
-           with refs = (make-array num-refs)
-           for i from 0 below num-refs
-           do (setf (svref refs i) (read-ref-index i stream))
-           finally (return (make-bam-index :refs refs)))))))
+    (let ((bytes (make-array 8 :element-type 'octet :initial-element 0)))
+      (read-sequence bytes stream :end 4)
+      (let* ((num-refs (decode-int32le bytes))
+             (refs (loop
+                      with refs = (make-array num-refs)
+                      for i from 0 below num-refs
+                      do (setf (svref refs i) (read-ref-index i stream))
+                      finally (return refs))))
+        (let ((kludge (read-sequence bytes stream)))
+          (if (plusp kludge)
+              (make-samtools-bam-index :refs refs
+                                       :unassigned (decode-int64le bytes))
+              (make-ref-index :refs refs)))))))
 
 (defun read-ref-index (ref-num stream)
   "Reads an index for a single reference sequence from STREAM."
@@ -127,6 +140,7 @@ by increasing bin number."
                  (make-chunk :start start :end end))))
       (let* ((bin-num (read-bin-num))
              (num-chunks (read-num-chunks)))
+        ;; FIXME -- have a switch to merge chunks here, as they are created
         (make-bin :num bin-num
                   :chunks (loop
                              with chunks = (make-array num-chunks)

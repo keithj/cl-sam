@@ -80,12 +80,11 @@ specification.
 - offset: The within-member offset component of the BGZF virtual file
   offset (least significant 16 bits). This is a position within the
   uncompressed data of the member.
-
+- util-buffer: a 4 byte buffer used internally to store an integer.
 - loaded-p: T if the bgz data has been loaded into the buffer (used
   internally in decompression and reading).
 - load-seek: On loading the bgz data, proceed immediately to this
   offset (used internally in decompression and reading).
-
 - eof: T if the decompression process has reached EOF (used internally
   in decompression and reading)."
   (pathname nil :type t)
@@ -96,12 +95,13 @@ specification.
   (position 0 :type (unsigned-byte 48))
   (offset 0 :type uint16)
   (pointer 0 :type uint16)
+  (util-buffer (make-array 4 :element-type 'octet :initial-element 0)
+               :type (simple-array octet (4)))
   (loaded-p nil :type t)
   (load-seek 0 :type uint16)
   (eof nil :type t))
 
-(defmacro with-bgzf ((var filespec &key (direction :input)
-                          (if-exists :overwrite)) &body body)
+(defmacro with-bgzf ((var filespec &rest args) &body body)
   "Executes BODY with VAR bound to a BGZF handle structure created by
 opening the file denoted by FILESPEC.
 
@@ -110,41 +110,43 @@ Arguments:
 - var (symbol): The symbol to be bound.
 - filespec (pathname designator): The file to open.
 
-Key:
+Rest:
 
-- direction (keyword): The direction, one of either :input or :output .
-- if-exists (keyword): Behaviour with respoect to existing
-  files. Defaults to :overwrite ."
-  `(let ((,var (bgzf-open ,filespec :direction ,direction
-                          :if-exists ,if-exists)))
+- args: Arguments applicable to bgzf-open."
+  `(let ((,var (bgzf-open ,filespec ,@args)))
     (unwind-protect
          (progn
            ,@body)
       (when ,var
         (bgzf-close ,var)))))
 
-(defun bgzf-open (filespec &key (direction :input) compression
-                  (if-exists :overwrite))
+(defun bgzf-open (bgzfspec &rest args &key compression &allow-other-keys)
   "Opens a block gzip file for reading or writing.
 
 Arguments:
 
-- filespec (pathname designator): The file to open.
+- bgzfspec (pathname designator or bgzf object): The file to open or
+an open bgzf object (which is returned unmodified).
 
 Key:
 
-- direction (keyword): The direction, one of either :read or :write .
-- if-exists (keyword): Behaviour with respect to existing
-  files. Defaults to :overwrite .
+- compression (keyword): The zlib compression level (for writing).
+
+Also accepts the keyword arguments applicable to CL:OPEN. However,
+an :element-type argument will be ignored as the type is always octet.
 
 Returns:
 
 - A BGZF structure."
-  (let ((stream (open filespec :element-type 'octet :direction direction
-                      :if-exists if-exists :if-does-not-exist :create)))
-    (if compression
-        (make-bgzf :stream stream :pathname filespec :compression compression)
-        (make-bgzf :stream stream :pathname filespec))))
+  (typecase bgzfspec
+    (bgzf bgzfspec)
+    (t (let ((stream (apply #'open bgzfspec :element-type 'octet
+                            (remove-key-values '(:element-type
+                                                 :compression) args))))
+         (if compression
+             (make-bgzf :stream stream :pathname bgzfspec
+                        :compression compression)
+             (make-bgzf :stream stream :pathname bgzfspec))))))
 
 (defun bgzf-close (bgzf)
   "Closes an open block gzip file.
@@ -156,10 +158,10 @@ Arguments:
 Returns:
 
 - T on success."
-  (let ((stream (bgzf-stream bgzf)))
-    (when (output-stream-p stream)
-       (bgzf-flush bgzf))
-    (close stream)))
+    (let ((stream (bgzf-stream bgzf)))
+      (when (output-stream-p stream)
+        (bgzf-flush bgzf))
+      (close stream)))
 
 (defun bgzf-open-p (bgzf)
   (open-stream-p (bgzf-stream bgzf)))

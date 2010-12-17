@@ -19,16 +19,16 @@
 
 (in-package :sam)
 
-(defconstant +bgzip-buffer-size+ 8192
+(defconstant +bgzip-buffer-size+ 4096
   "Buffer size for {defclass bgzip-input-stream} internal buffer.")
 
 (deftype bgzip-buffer ()
   "Buffer type for {defclass bgzip-input-stream} internal buffer."
-  `(simple-array octet (,+bgzip-buffer-size+)))
+  '(simple-array octet (4096)))
 
 (deftype bgzip-buffer-index ()
   "Index type for {defclass bgzf-input-stream} internal buffer."
-  `(integer 0 ,+bgzip-buffer-size+))
+  '(integer 0 4096))
 
 (defclass bgzf-handle-mixin ()
   ((bgzf :initform nil
@@ -81,7 +81,7 @@ Returns:
 (defmethod stream-element-type ((stream bgzip-stream))
   'octet)
 
-(defmethod close ((stream bgzip-stream) &key abort)
+(defmethod stream-close ((stream bgzip-stream) &key abort)
   (declare (ignore abort))
   (when (open-stream-p stream)
     (unwind-protect

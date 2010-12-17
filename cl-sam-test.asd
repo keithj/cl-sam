@@ -27,4 +27,5 @@
                                        (:file "pileup-parser")
                                        (:file "cl-sam-test")
                                        (:file "sam-test")
-                                       (:file "bam-test")))))
+                                       (:file "bam-test")
+                                       (:file "bam-index-test")))))

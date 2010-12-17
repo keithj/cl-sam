@@ -39,11 +39,6 @@
   (make-array 4 :element-type 'base-char
               :initial-contents '(#\Space #\Tab #\Linefeed #\Return)))
 
-(declaim (type simple-base-string *invalid-reference-name-chars*))
-(defvar *invalid-reference-name-chars*
-  (make-array 6 :element-type 'base-char
-              :initial-contents '(#\Space #\Tab #\Return #\Linefeed #\@ #\=)))
-
 (defgeneric encode-alignment-tag (value tag vector index)
   (:documentation "Performs binary encoding of VALUE into VECTOR under
   TAG at INDEX, returning VECTOR."))
@@ -372,18 +367,17 @@ sequence of the first base of the clipped read."
   "Returns the length of the alignment on the read."
   (loop
      for (op . len) in (alignment-cigar aln)
-     when (member op '(:i :m :s)) sum len))
+     when (member op '(:i :m :s := :x)) sum len))
 
 (defun alignment-reference-length (aln)
   "Returns the length of the alignment on the reference."
   (loop
      for (op . len) in (alignment-cigar aln)
-     when (member op '(:d :m :n)) sum len))
+     when (member op '(:d :m :n := :x)) sum len))
 
 (declaim (inline read-name-length))
 (defun read-name-length (aln)
-  "Returns the length in ASCII characters of the read name of
-ALN."
+  "Returns the length in ASCII characters of the read name of ALN."
   (decode-uint8le aln 8))
 
 (defun mapping-quality (aln)
@@ -524,6 +518,19 @@ consistent."
                   (first-in-pair-p flag)
                   (second-in-pair-p flag))))))
 
+(defun valid-read-name-p (str)
+  "Returns T if STR is a valid read name matching the regex
+[!-?A-~]1,255 , or NIL otherwise. The length limit is implicit in the
+BAM format, there being 8 bits to store the read name length. This
+function is not used as it is not clear that this check is accepted by
+other implementations."
+  (flet ((name-char-p (c)
+           (and (char/= #\@ c) (< 32 (char-code c) 127))))
+    (let ((len (length str)))
+      (and (< 0 len 256) (loop
+                            for c across str
+                            always (name-char-p c))))))
+
 (defun read-length (aln)
   "Returns the length of the read described by ALN."
   (decode-int32le aln 16))
@@ -544,8 +551,7 @@ described by ALN."
 
 (defun read-name (aln)
   "Returns the read name string described by ALN."
-  (decode-read-name aln 32
-                    (read-name-length aln)))
+  (decode-read-name aln 32 (read-name-length aln)))
 
 (defun alignment-cigar (aln)
   "Returns the CIGAR record list of the alignment described by
@@ -738,7 +744,8 @@ INDEX."
 
 (defun decode-cigar (aln index num-bytes)
   "Returns an alist of CIGAR operations from NUM-BYTES bytes within
-ALN, starting at INDEX."
+ALN, starting at INDEX. The decoding of the = and X operations is not
+documented in the spec."
   (flet ((decode-len (uint32)
            (ash uint32 -4))
          (decode-op (uint32)
@@ -749,7 +756,9 @@ ALN, starting at INDEX."
              (3 :n)
              (4 :s)
              (5 :h)
-             (6 :p))))
+             (6 :p)
+             (7 :=)
+             (8 :x))))
     (loop
        for i from index below (1- (+ index num-bytes)) by 4
        collect (let ((x (decode-uint32le aln i)))
@@ -766,13 +775,15 @@ ALN, starting at INDEX."
                                              (:n 3)
                                              (:s 4)
                                              (:h 5)
-                                             (:p 6)))
+                                             (:p 6)
+                                             (:= 7)
+                                             (:x 8)))
              uint32)))
     (loop
        for (op . length) in cigar
        for i = index then (+ 4 i)
        do (encode-int32le (encode-op-len op length) aln i)
-           finally (return aln))))
+       finally (return aln))))
 
 (defun decode-tag-values (aln index)
   "Returns a list of auxilliary data from ALN at INDEX. The BAM
@@ -886,13 +897,12 @@ starting at INDEX."
     ((integer 0 4294967295) 7)))
 
 (defun ensure-valid-reference-name (str)
+  "Returns STR if it is a valid reference sequence name, or raises a
+{define-condition malformed-field-error} if not."
   (declare (optimize (speed 3)))
-  (declare (type simple-string str))
-  (loop
-     for c across str
-     do (check-field (not (find c *invalid-reference-name-chars* :test #'char=))
-                     nil str "invalid character ~c in reference name" c)
-     finally (return str)))
+  (and (check-field (valid-reference-name-p str) nil str
+                    "invalid reference name")
+       str))
 
 (defun ensure-valid-read-name (str)
   (declare (optimize (speed 3)))

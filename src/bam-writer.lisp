@@ -19,6 +19,14 @@
 
 (in-package :sam)
 
+(defun make-bam-output (bam)
+  "Returns a consumer function that accepts an argument of a BAM
+record and writes it to BAM output stream BAM. The standard consumer
+interface function CONSUME may be used in operations on the returned
+consumer."
+  (lambda (aln)
+    (write-alignment bam aln)))
+
 (defun write-bam-magic (bgzf &key (compress t))
   "Writes the BAM magic number to the handle BGZF."
   (write-bytes bgzf *bam-magic* (length *bam-magic*) :compress compress))
@@ -89,12 +97,14 @@ Optional:
 end of the header string, as allowed by the SAM spec. This is useful
 for creating slack space so that BAM headers may be edited in place."
   (+ (write-bam-magic bgzf :compress compress)
-     (write-bam-header bgzf header :compress compress
-                       :null-padding null-padding)
-
-     ;; Unless compressing, flush here to move to the next bgz member,
-     ;; leaving the magic number and header uncompressed.
-     
+     (prog1
+         (write-bam-header bgzf header :compress compress
+                           :null-padding null-padding)
+       ;; Unless compressing, flush here to move to the next bgz
+       ;; member, leaving the magic number and header uncompressed and
+       ;; in their own block.
+       (unless compress
+         (bgzf-flush bgzf :compress compress :append-eof nil)))
      (write-num-references bgzf num-refs)
      (loop
         for (nil ref-name ref-length) in ref-meta

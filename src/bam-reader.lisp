@@ -19,6 +19,146 @@
 
 (in-package :sam)
 
+(defmacro with-bam ((var (&optional header num-refs ref-meta) filespec
+                         &rest args &key (compress t) (null-padding 0)
+                         index ref-num (start 0) (end (expt 2 29))
+                         &allow-other-keys)
+                    &body body)
+  "Evaluates BODY with VAR bound to a new BAM generator function on
+pathname designator FILESPEC. The direction (:input versus :output) is
+determined by the stream-opening arguments in ARGS. The standard
+generator interface functions NEXT and HAS-MORE-P may be used in
+operations on the returned generator.
+
+On reading, HEADER, NUM-REFS and REF-META will be automatically bound
+to the BAM file metadata i.e. the metadata are read automatically and
+the iterator positioned before the first alignment record.
+
+Optionally, iteration may be restricted to a specific reference,
+designated by REF-NUM and to alignments that start between reference
+positions START and END. Furthermore, a BAM-INDEX object INDEX may be
+provided to allow the stream to seek directly to the desired region of
+the file.
+
+On writing, HEADER, NUM-REFS and REF-META should be bound to
+appropriate values for the BAM file metadata, which will be
+automatically written to the underlying stream.
+
+The COMPRESS and NULL-PADDING keyword arguments are only applicable on
+writing where they control whether the header block should be
+compressed and whether the header string should be padded with nulls
+to allow space for expansion.
+
+For example:
+
+To count all records in a BAM file:
+
+;;; (with-bam (in (header) \"in.bam\")
+;;;   (declare (ignore header))
+;;;   (loop
+;;;      while (has-more-p in)
+;;;      count (next in)))
+
+To copy only records with a mapping quality of >= 30 to another BAM
+file:
+
+;;; (with-bam (in (h n r) \"in.bam\")
+;;;   (with-bam (out (h n r) \"out.bam\" :direction :output)
+;;;     (let ((q30 (discarding-if (lambda (x)
+;;;                                 (< (mapping-quality x) 30)) in)))
+;;;       (loop
+;;;          while (has-more-p q30)
+;;;          do (consume out (next q30))))))"
+  (with-gensyms (bgzf)
+    (let ((default-header (with-output-to-string (s)
+                            (write-sam-header
+                             `((:HD (:VN . ,*sam-version*))) s))))
+      `(with-bgzf (,bgzf ,filespec ,@(remove-key-values
+                                      '(:compress :null-padding :index
+                                        :ref-num :start :end) args))
+         ,@(if (search '(:direction :output) args)
+               `((write-bam-meta ,bgzf
+                                 ,(or header default-header)
+                                 ,(or num-refs 0) ,ref-meta
+                                 :compress ,compress
+                                 :null-padding ,null-padding)
+                 (let ((,var (make-bam-output ,bgzf)))
+                   ,@body))
+               `((multiple-value-bind (,@(when header `(,header))
+                                       ,@(when num-refs `(,num-refs))
+                                       ,@(when ref-meta `(,ref-meta)))
+                     (read-bam-meta ,bgzf)
+                   ,@(cond (ref-meta
+                            `((declare (ignorable ,header ,num-refs))))
+                           (num-refs
+                            `((declare (ignorable ,header)))))
+                   (let ((,var (make-bam-input ,bgzf
+                                               :index ,index
+                                               :ref-num ,ref-num
+                                               :start ,start
+                                               :end ,end)))
+                     ,@body))))))))
+
+(defun make-bam-input (bam &key index ref-num (start 0) (end (expt 2 29)))
+  "Returns a generator function that returns BAM alignment records for
+BAM stream BAM. Optionally, iteration may be restricted to a specific
+reference, designated by REF-NUM and to alignments that start between
+reference positions START and END. Furthermore, a BAM-INDEX object
+INDEX may be provided to allow the stream to seek directly to the
+desired region of the file. The standard generator interface functions
+NEXT and HAS-MORE-P may be used in operations on the returned
+generator.
+
+For example:
+
+To count all records in a BAM file:
+
+;;; (with-bgzf (bam \"in.bam\")
+;;;   (read-bam-meta bam)
+;;;   (let ((in (make-bam-input bam)))
+;;;     (loop
+;;;        while (has-more-p in)
+;;;        count (next in))))
+
+To copy only records with a mapping quality of >= 30 to another BAM
+file:
+
+;;; (with-bgzf (bam-in \"in.bam\")
+;;;   (with-bgzf (bam-out \"out.bam\" :direction :output)
+;;;     (multiple-value-bind (header num-refs ref-meta)
+;;;         (read-bam-meta bam-in)
+;;;       (write-bam-meta bam-out header num-refs ref-meta))
+;;;     (let ((fn (discarding-if (lambda (x)
+;;;                                (< (mapping-quality x) 30))
+;;;                              (make-bam-input bam-in))))
+;;;       (loop
+;;;          while (has-more-p fn)
+;;;          do (write-alignment bam-out (next fn))))))"
+  (flet ((out-of-bounds-p (aln)
+           (or (not aln)
+               (/= ref-num (reference-id aln))
+               (let ((pos (alignment-position aln)))
+                 (or (< pos start) (> pos end))))))
+    (if index
+        (let ((chunks (make-bam-chunk-queue index ref-num start end)))
+          (cond ((queue-empty-p chunks)
+                 (defgenerator
+                     (more nil)
+                     (next nil)))
+                (t
+                 (bgzf-seek bam (max (aref (ref-index-intervals
+                                            (ref-index index ref-num))
+                                           (region-to-interval start))
+                                     (chunk-start (queue-first chunks))))
+                 (make-bam-chunk-input bam chunks end))))
+        (let ((fn (let ((current (read-alignment bam)))
+                    (defgenerator
+                        (more (not (null current)))
+                        (next (prog1
+                                  current
+                                (setf current (read-alignment bam))))))))
+          (discarding-if #'out-of-bounds-p fn)))))
+
 (defun read-bam-magic (bgzf)
   "Reads the BAM magic number from the handle BGZF and returns T if it
 is valid or raises a {define-condition malformed-file-error} if not."

@@ -23,14 +23,12 @@
 
 (defsystem cl-sam
     :name "cl-sam"
-    :version "0.9.6"
+    :version "0.11.1"
     :author "Keith James"
     :licence "GPL v3"
     :depends-on ((:version :cffi "0.10.3")
-                 (:version :deoxybyte-gzip "0.1.8")
-                 (:version :deoxybyte-io "0.6.2")
-                 (:version :deoxybyte-unix "0.6.5")
-                 (:version :deoxybyte-utilities "0.9.1"))
+                 (:version :deoxybyte-gzip "0.3.2")
+                 (:version :deoxybyte-unix "0.6.5"))
     :in-order-to ((test-op (load-op :cl-sam :cl-sam-test)))
     :components
     ((:module :cl-sam
@@ -44,13 +42,13 @@
                            (:file "bgzip-stream")
                            (:file "bam")
                            (:file "sam")
+                           (:file "bam-index")
+                           (:file "bam-index-reader")
+                           (:file "bam-index-writer")
                            (:file "bam-reader")
                            (:file "bam-writer")
                            (:file "sam-writer")
                            (:file "external-bam-sort")
-                           (:file "bam-index")
-                           (:file "bam-index-reader")
-                           (:file "bam-index-writer")
                            (:file "bam-utilities")
                            (:file "cl-sam")))
      (:lift-test-config :lift-tests
