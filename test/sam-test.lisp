@@ -231,3 +231,25 @@
                                 :program-version "2.0"
                                 :command-line "run_program_c -a 1 -b 2"
                                 :previous-program "!! no such PP !!")))))
+
+(addtest (cl-sam-tests) user-header-tag/1
+  (ensure (header-equal '((:HD (:VN . "1.3"))
+                          (:SQ (:SN . "AL096846") (:LN . 6490)
+                           (:SP . "Schizosaccharomyces pombe"))
+                          (:RG (:ID . "1") (:SM . "a sample")
+                           (:|Fo| . "foo")))
+                        (make-sam-header "@HD	VN:1.3
+@SQ	SN:AL096846	LN:6490	SP:Schizosaccharomyces pombe
+@RG	ID:1	SM:a sample	Fo:foo")))
+  (ensure (header-equal '((:HD (:VN . "1.3"))
+                          (:SQ (:SN . "AL096846") (:LN . 6490)
+                           (:SP . "Schizosaccharomyces pombe"))
+                          (:RG (:ID . "1") (:SM . "a sample")
+                           (:|fO| . "foo")))
+                        (make-sam-header "@HD	VN:1.3
+@SQ	SN:AL096846	LN:6490	SP:Schizosaccharomyces pombe
+@RG	ID:1	SM:a sample	fO:foo"))))
+
+(addtest (cl-sam-tests) user-header-tag/2
+  (ensure-condition malformed-field-error
+    (make-header-record "@RG	Fo:")))

@@ -53,12 +53,14 @@ header HEADER-TYPE."
                :format-control "missing colon in tag:value"))
       (let ((tag (subseq str 0 2))
             (,var (subseq str 3)))
-        (cond ,@(loop
+        (cond ((find-if #'lower-case-p tag)
+               (cons (intern tag :keyword) ,var))
+              ,@(loop
                    for (tag-val sym form) in tag-specs
                    collect `((string= ,tag-val tag)
                              (cons ,sym ,(if form
-                                            `,form
-                                          `,var))))
+                                             `,form
+                                             `,var))))
               (t
                (error 'malformed-field-error :field str
                       :format-control "invalid ~a tag ~a"
@@ -165,6 +167,11 @@ of :HD , :SQ , :RG or :PG ."
   "Returns the value associated with TAG in RECORD."
   (assocdr tag (header-tags record)))
 
+(defun user-header-tag-p (tag)
+  "Returns T if TAG is a SAM 1.3 user-defined header tag. User-defined
+tags are recognised by containing lower case letters."
+  (find-if #'lower-case-p (string tag)))
+
 (defun mandatory-header-tags (header-type)
   "Returns a list of the mandatory tags for SAM header
 HEADER-TYPE. Both HEADER-TYPE. and the returned tags are represented
@@ -193,9 +200,9 @@ a {define-condition malformed-record-error} ."
 (defun ensure-valid-header-tags (record)
   "Checks list HEADER-RECORD for tag validity and returns
 HEADER-RECORD or raises a {define-condition malformed-record-error} if
-invalid tags are present."
+invalid tags are present. Ignores any user tags (lower case tags)."
   (let* ((header-type (header-type record))
-         (tags (header-tags record))
+         (tags (remove-if #'user-header-tag-p (header-tags record) :key #'first))
          (valid (valid-header-tags header-type))
          (tag-keys (mapcar #'first tags)))
     (unless (subsetp tag-keys valid)
