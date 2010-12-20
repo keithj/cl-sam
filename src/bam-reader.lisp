@@ -136,28 +136,28 @@ file:
 ;;;          do (write-alignment bam-out (next fn))))))"
   (flet ((out-of-bounds-p (aln)
            (or (not aln)
-               (/= ref-num (reference-id aln))
                (let ((pos (alignment-position aln)))
                  (or (< pos start) (> pos end))))))
-    (if index
-        (let ((chunks (make-bam-chunk-queue index ref-num start end)))
-          (cond ((queue-empty-p chunks)
-                 (defgenerator
-                     (more nil)
-                     (next nil)))
-                (t
-                 (bgzf-seek bam (max (aref (ref-index-intervals
-                                            (ref-index index ref-num))
-                                           (region-to-interval start))
-                                     (chunk-start (queue-first chunks))))
-                 (make-bam-chunk-input bam chunks end))))
-        (let ((fn (let ((current (read-alignment bam)))
-                    (defgenerator
-                        (more (not (null current)))
-                        (next (prog1
-                                  current
-                                (setf current (read-alignment bam))))))))
-          (discarding-if #'out-of-bounds-p fn)))))
+    (let ((chunks (and index (make-bam-chunk-queue index ref-num start end))))
+      (cond ((and chunks (queue-empty-p chunks))
+             (defgenerator
+                 (more nil)
+                 (next nil)))
+            (chunks
+             (bgzf-seek bam (max (aref (ref-index-intervals
+                                        (ref-index index ref-num))
+                                       (region-to-interval start))
+                                 (chunk-start (queue-first chunks))))
+             (let ((fn (make-bam-chunk-input bam chunks end)))
+               (discarding-if #'out-of-bounds-p fn)))
+            (t
+             (let ((fn (let ((current (read-alignment bam)))
+                         (defgenerator
+                             (more (not (null current)))
+                             (next (prog1
+                                       current
+                                     (setf current (read-alignment bam))))))))
+               (discarding-if #'out-of-bounds-p fn)))))))
 
 (defun read-bam-magic (bgzf)
   "Reads the BAM magic number from the handle BGZF and returns T if it
@@ -231,3 +231,4 @@ raising a {define-condition malformed-file-error} otherwise."
   (or (bgzf-eof-p bgzf)
       (error 'malformed-file-error :file (bgzf-pathname bgzf)
              :format-control "BGZF EOF was missing")))
+
