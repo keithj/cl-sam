@@ -35,8 +35,8 @@
 ;;;   "end" field contains the file offset of the end of the reference.
 ;;;
 ;;; Second chunk:
-;;;  "start" field contains the number of mapped reads on the reference
-;;;   "end" field contains the number of unmapped reads on the reference
+;;;  "start" field contains the number of mapped reads on the reference.
+;;;   "end" field contains the number of unmapped reads on the reference.
 ;;;
 ;;; Sometimes unmapped reads are assigned a reference and mapping
 ;;; position for sorting purposes. Also note that the extra bin IS NOT
@@ -81,7 +81,7 @@ or raises a {define-condition malformed-file-error} if not."
                                        :unassigned (decode-int64le bytes))
               (make-ref-index :refs refs)))))))
 
-(defun read-ref-index (ref-num stream)
+(defun read-ref-index (reference-id stream)
   "Reads an index for a single reference sequence from STREAM."
   (let ((bytes (make-array 4 :element-type 'octet)))
     (flet ((read-index-size ()
@@ -92,12 +92,12 @@ or raises a {define-condition malformed-file-error} if not."
              (num-intervals (read-index-size))
              (intervals (read-linear-index num-intervals stream)))
         (if (zerop num-bins)
-            (make-ref-index :num ref-num :bins bins :intervals intervals)
+            (make-ref-index :id reference-id :bins bins :intervals intervals)
             (let ((last-bin (svref bins (1- num-bins)))) ; kludge
               (cond ((= +samtools-kludge-bin+ (bin-num last-bin))
                      (let ((x (svref (bin-chunks last-bin) 0))
                            (y (svref (bin-chunks last-bin) 1)))
-                       (make-samtools-ref-index :num ref-num
+                       (make-samtools-ref-index :id reference-id
                                                 :bins (subseq bins 0
                                                               (1- num-bins))
                                                 :intervals intervals
@@ -110,7 +110,7 @@ or raises a {define-condition malformed-file-error} if not."
                             :record last-bin
                             :format-control "bin number out of range"))
                     (t
-                     (make-ref-index :num ref-num :bins bins
+                     (make-ref-index :id reference-id :bins bins
                                      :intervals intervals)))))))))
 
 (defun read-binning-index (num-bins stream)
