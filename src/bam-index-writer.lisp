@@ -19,93 +19,170 @@
 
 (in-package :sam)
 
+;;
+;; Indexing algorithm:
+;;
+;; foreach alignment
+;;   if alignment is unmapped
+;;     count unmapped
+;;   else
+;;     count mapped
+;;     get alignment position
+;;     get alignment length on reference
+;;     get the alignment bin number
+;;     get the current chunk start (bam-tell)
+;;     get the current chunk end (chunk start + size-tag + alignment bytes)
+;;       if current chunk is close to previous chunk
+;;         extend previous chunk to current chunk end
+;;       else
+;;         add current chunk to list
+;;
+;;       get alignment interval
+;;       if chunk start for interval > current chunk start
+;;         chunk start for interval = current chunk start
+;;
+;; Notes:
+;;
+;; Unmapped reads are identified by a reference id of -1.
+;;
+;; Unmapped reads with a pos, but with an alignment length on their
+;; reference of 0, are nominally length 1.
+;;
+
 (defun index-bam-file (filespec)
   "Returns a new BAM-INDEX object, given pathname designator FILESPEC."
+  (declare (optimize (debug 3)))
   (with-bgzf (bam filespec)
     (multiple-value-bind (header num-refs ref-meta)
         (read-bam-meta bam)
       (declare (ignore header))
-      (let ((chunks (make-hash-table :test #'equal))
-            (intervals (make-hash-table)))
-        (dotimes (n num-refs)
-          (let ((ref-len (second (assocdr n ref-meta))))
-            (setf (gethash n intervals) (make-array
-                                         (ceiling ref-len +linear-bin-size+)
-                                         :element-type 'fixnum
-                                         :initial-element 0))))
-        (loop
-           for cstart = (bgzf-tell bam)
-           for aln = (read-alignment bam)
-           while aln
-           do (let ((pos (alignment-position aln)))
-                ;; FIXME -- do something with -1 pos reads?
-                ;; FIXME -- do we want to override the stored
-                ;; bin number sometimes?
-                (unless (minusp pos)
-                  (let* ((ref-num (reference-id aln))
-                         (len (alignment-reference-length aln))
-                         (stored-bin-num (alignment-bin aln))
-                         (bin-num (if (zerop stored-bin-num)
-                                      (region-to-bin pos (+ pos len))
-                                      stored-bin-num))
-                         (ckey (list ref-num bin-num))
-                         (cend (+ cstart 4 (length aln))))
-                    (let* ((cseq (or (gethash ckey chunks)
-                                     (setf (gethash ckey chunks)
-                                           (make-array 0 :fill-pointer 0
-                                                       :adjustable t))))
-                           (clen (length cseq))
-                           (clast (when (plusp clen)
-                                    (aref cseq (1- clen)))))
-                      (if (and clast (voffset-merge-p
-                                      (chunk-start clast) cstart))
-                          (setf (chunk-end clast) cend)
-                          (vector-push-extend (make-chunk :start cstart
-                                                          :end cend) cseq)))
-                    ;; FIXME -- unaligned reads with a pos but
-                    ;; alignment length on reference == 0, are
-                    ;; nominally length 1
-                    (let* ((iseq (gethash ref-num intervals))
-                           (istart (floor pos +linear-bin-size+))
-                           (iend (if (zerop len)
-                                     (1+ istart)
-                                     (+ istart (floor len +linear-bin-size+)))))
-                      (loop
-                         for i from istart to iend
-                         when (or (zerop (aref iseq i))
-                                  (< cstart (aref iseq i)))
-                         do (setf (aref iseq i) cstart)))))))
-        (build-bam-index chunks intervals)))))
+      (labels ((ref-len (ref-id)
+                 (second (assocdr ref-id ref-meta)))
+               (make-intervals (ref-id)
+                 (make-array (ceiling (ref-len ref-id) +linear-bin-size+)
+                             :element-type 'fixnum :initial-element 0))
+               (interval-start (pos)
+                 (floor pos +linear-bin-size+))
+               (interval-end (pos len)
+                 (if (zerop len)
+                     (1+ (interval-start pos))
+                     (floor (1- (+ pos len)) +linear-bin-size+)))
+               (bin-num (stored-bin-num pos len)
+                 (if (zerop stored-bin-num)
+                     (region-to-bin pos (+ pos len))
+                     stored-bin-num)))
+        (do* ((file-pos (bgzf-tell bam) (bgzf-tell bam))
+              (aln (read-alignment bam) (read-alignment bam))
+              (previous-pos 0)
+              (mapped 0)
+              (unmapped 0)
+              (unassigned 0)
+              (current-ref-id 0)
+              (ref-start file-pos)
+              (chunks (make-hash-table))
+              (intervals (make-intervals 0))
+              (last-interval 0)
+              (indices ())
+              (eof nil))
+             (eof (%make-bam-index num-refs indices unassigned))
+          (cond ((and (null aln) (zerop unassigned))
+                 (push (%make-ref-index
+                        current-ref-id ref-start (bgzf-tell bam)
+                        chunks (subseq intervals 0 (1+ last-interval))
+                        mapped unmapped) indices)
+                 (setf eof t))
+                ((null aln)
+                 (setf eof t))
+                (t
+                 (let ((ref-id (reference-id aln))
+                       (pos (alignment-position aln))
+                       (flag (alignment-flag aln)))
+                   (if (and (= current-ref-id ref-id) (> previous-pos pos))
+                       (error "alignments out of order: ~a > ~a" previous-pos pos)
+                       (setf previous-pos pos))
 
-(defun build-bam-index (chunks intervals)
-  "Returns a new bam index given a hash-table CHUNKS of chunk vectors
-keyed on ref-num and bin-num and a hash-table INTERVALS of interval
-vectors, keyed on ref-num."
-  (let* ((num-refs (hash-table-count intervals))
-         (bins (make-hash-table :size num-refs))
-         (ref-indices (make-array num-refs)))
-    (loop
-       for (ref-num bin-num) being the hash-keys of chunks
-       using (hash-value chunks)
-       do (let ((bvec (gethash ref-num bins))
-                (bin (make-bin :num bin-num
-                               :chunks (make-array (length chunks)
-                                                   :initial-contents chunks))))
-            (if bvec
-                (vector-push-extend bin bvec)
-                (setf (gethash ref-num bins)
-                      (make-array 1 :fill-pointer 0 :adjustable t
-                                  :initial-element bin)))))
-    (loop
-       for ref-num being the hash-keys of bins
-       using (hash-value bvec)
-       do (setf (svref ref-indices ref-num)
-                (make-ref-index
-                 :num ref-num
-                 :bins (sort (make-array (length bvec) :initial-contents bvec)
-                             #'< :key #'bin-num)
-                 :intervals (gethash ref-num intervals))))
-    (make-bam-index :refs ref-indices)))
+                   (cond ((and (/= current-ref-id ref-id) (minusp ref-id))
+                          (push (%make-ref-index
+                                 current-ref-id ref-start file-pos
+                                 chunks (subseq intervals 0
+                                                (1+ last-interval))
+                                 mapped unmapped) indices)
+                          (setf current-ref-id ref-id))
+                         ((and (/= current-ref-id ref-id) (minusp current-ref-id))
+                          (error "alignments out of order"))
+                         ((/= current-ref-id ref-id)
+                          (push (%make-ref-index
+                                 current-ref-id ref-start file-pos
+                                 chunks (subseq intervals 0
+                                                (1+ last-interval))
+                                 mapped unmapped) indices)
+                          (clrhash chunks)
+                          (setf current-ref-id ref-id
+                                ref-start file-pos
+                                intervals (make-intervals ref-id)
+                                last-interval 0
+                                mapped 0
+                                unmapped 0)))
+
+                   (cond ((minusp ref-id)
+                          (incf unassigned))
+                         ((query-unmapped-p flag)
+                          (incf unmapped))
+                         (t
+                          (incf mapped)))
+
+                   (when (not (minusp pos))
+                     (let* ((len (alignment-reference-length aln))
+                            (bin-num (bin-num (alignment-bin aln) pos len))
+                            (bin-chunks (gethash bin-num chunks))
+                            (chunk (first bin-chunks))
+                            (cstart file-pos)
+                            (cend (bgzf-tell bam))
+                            (istart (interval-start pos))
+                            (iend (interval-end pos len)))
+                       (if (and chunk (voffset-merge-p (chunk-start chunk) cstart))
+                           (setf (chunk-end chunk) cend)
+                           (setf (gethash bin-num chunks)
+                                 (cons (make-chunk :start cstart
+                                                   :end cend) bin-chunks)))
+                       (setf last-interval (max last-interval iend))
+                       (loop
+                          for i from istart to iend
+                          when (or (zerop (aref intervals i))
+                                   (< cstart (aref intervals i)))
+                          do (setf (aref intervals i) cstart))))))))))))
+
+(defun %make-ref-index (reference-id ref-start ref-end chunks intervals
+                        &optional (mapped 0) (unmapped 0))
+  (flet ((make-chunks (elts)
+           (make-array (length elts) :initial-contents (nreverse elts)))
+         (fill-intervals (elts)
+           (loop
+              with previous = 0
+              for i from 0 below (length elts)
+              do (if (zerop (aref elts i))
+                     (setf (aref elts i) previous)
+                     (setf previous (aref elts i)))
+              finally (return elts))))
+    (let ((bins (loop
+                   for key being the hash-keys of chunks using (hash-value val)
+                   collect (make-bin :num key :chunks (make-chunks val)))))
+      (make-samtools-ref-index :id reference-id
+                               :bins (sort (make-array (length bins)
+                                                       :initial-contents bins)
+                                           #'< :key #'bin-num)
+                               :intervals (fill-intervals intervals)
+                               :start ref-start :end ref-end
+                               :mapped mapped :unmapped unmapped))))
+
+(defun %make-bam-index (num-refs ref-indices &optional (unassigned 0))
+  (let* ((empty-indices (loop
+                           for i from (length ref-indices) below num-refs
+                           collect (make-ref-index :id i)))
+         (ivec (replace (replace (make-array num-refs) ref-indices)
+                        empty-indices :start1 (length ref-indices))))
+    (make-samtools-bam-index :refs (sort ivec #'< :key #'ref-index-id)
+                             :unassigned unassigned)))
 
 (defun write-index-magic (stream)
   (write-sequence *bam-index-magic* stream))

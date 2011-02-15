@@ -51,12 +51,13 @@ vector of bins (the binning index) and a vector of intervals (the
 linear index). The bins are sorted by increasing bin number. The
 binning index is hierarchical, while the linear index is flat, being a
 projection of reads from all bins onto a single vector."
-  (num -1 :type fixnum :read-only t)
+  (id -1 :type fixnum :read-only t)
   (bins (make-array 0 :initial-element nil) :type simple-vector)
   (intervals (make-array 0 :element-type 'fixnum)
              :type (simple-array fixnum (*))))
 
-(defstruct (samtools-ref-index (:include ref-index))
+(defstruct (samtools-ref-index (:include ref-index)
+                               (:print-object print-samtools-ref-index))
   "A samtools-specific reference index containing extra,
 undocumented data:
 
@@ -84,10 +85,45 @@ lie within a bin and are close together within the BAM file."
   (start 0 :type (unsigned-byte 64))
   (end most-positive-fixnum :type (unsigned-byte 64)))
 
+(defstruct (region (:constructor make-region (&key ref start end))
+                   (:constructor region (ref start end))
+                   (:print-object print-region))
+  "A range of bases over a reference sequence."
+  (ref nil :type t)
+  (start 0 :type fixnum)
+  (end 0 :type fixnum))
+
 (defun print-ref-index (ref-index stream)
   "Prints a string representation of REF-INDEX to STREAM."
   (print-unreadable-object (ref-index stream :type t)
-    (format stream "ref-num: ~d " (ref-index-num ref-index))
+    (format stream "~d " (ref-index-id ref-index))
+    (princ (remove-if #'null (ref-index-bins ref-index)) stream)
+    (princ #\Space stream)
+    (labels ((rle (x &optional current (run-length 0))
+               (cond ((and (null x) (zerop run-length))
+                      nil)
+                     ((null x)
+                      (list (cons run-length current)))
+                     ((null current)
+                      (rle (rest x) (first x) 1))
+                     ((eql current (first x))
+                      (rle (rest x) current (1+ run-length)))
+                     (t
+                      (cons (cons run-length current)
+                            (rle (rest x) (first x) 1))))))
+      (princ (rle (coerce (ref-index-intervals ref-index) 'list)) stream))))
+
+(defun print-samtools-ref-index (ref-index stream)
+  "Prints a string representation of REF-INDEX to STREAM."
+  (print-unreadable-object (ref-index stream :type t)
+    (let ((start (samtools-ref-index-start ref-index))
+          (end (samtools-ref-index-end ref-index)))
+      (format stream "~d ~d:~d..~d:~d ~d/~d "
+              (ref-index-id ref-index)
+              (bgzf-coffset start) (bgzf-uoffset start)
+              (bgzf-coffset end) (bgzf-uoffset end)
+              (samtools-ref-index-mapped ref-index)
+              (samtools-ref-index-unmapped ref-index)))
     (princ (remove-if #'null (ref-index-bins ref-index)) stream)
     (princ #\Space stream)
     (labels ((rle (x &optional current (run-length 0))
@@ -120,10 +156,16 @@ lie within a bin and are close together within the BAM file."
               (bgzf-coffset start) (bgzf-uoffset start)
               (bgzf-coffset end) (bgzf-uoffset end)))))
 
-(defun ref-index (bam-index ref-num)
-  "Returns the reference index for reference number REF-NUM in
+(defun print-region (region stream)
+  "Prints a string representation of RANGE to STREAM."
+  (print-unreadable-object (region stream :type t)
+    (format stream "ref: ~a ~d..~d" (region-ref region)
+            (region-start region) (region-end region))))
+
+(defun ref-index (bam-index reference-id)
+  "Returns the reference index for reference number REFERENCE-ID in
 BAM-INDEX."
-  (svref (bam-index-refs bam-index) ref-num))
+  (svref (bam-index-refs bam-index) reference-id))
 
 (defun ref-index-bin (ref-index bin-num)
   "Returns the BIN number BIN-NUM in REF-INDEX."
@@ -136,6 +178,11 @@ BAM-INDEX."
 (defun bin-chunk (bin chunk-num)
   "Returns the chunk number CHUNK-NUM in BIN."
   (svref (bin-chunks bin) chunk-num))
+
+(defparameter *tree-deepening-boundaries* '(4681 585  73   9   1))
+
+(defun max-bin-num (ref-length)
+  (+ (1- (first *tree-deepening-boundaries*)) (ash ref-length -14)))
 
 (defun region-to-bins (start end)
   "Returns a bit vector with the bits for relevant bins set, given a
@@ -181,16 +228,16 @@ regions."
 in the BAM linear index."
   (floor coord +linear-bin-size+))
 
-(defun find-bins (index ref-num start end)
-  "Returns a list of all the bins for reference REF-NUM in INDEX,
+(defun find-bins (index reference-id start end)
+  "Returns a list of all the bins for reference REFERENCE-ID in INDEX,
 between reference positions START and END."
   (let ((num-refs (length (bam-index-refs index))))
-    (check-arguments (< -1 ref-num num-refs) (ref-num)
-                     "must satisfy (<= 0 ref-num ~d)" (1- num-refs))
+    (check-arguments (< -1 reference-id num-refs) (reference-id)
+                     "must satisfy (<= 0 reference-id ~d)" (1- num-refs))
     (check-arguments (<= start end) (start end)
                      "must satisfy (<= start end)"))
  (let ((bin-nums (region-to-bins start end))
-       (bins (ref-index-bins (ref-index index ref-num))))
+       (bins (ref-index-bins (ref-index index reference-id))))
    (loop
       for i from 0 below +max-num-bins+
       for bin = (when (plusp (sbit bin-nums i))
@@ -213,14 +260,14 @@ the intervening bytes, rather than seeking."
 of list CHUNKS that are {defun adjacentp} ."
   (if (endp (rest chunks))
       chunks
-      (let ((x (copy-chunk (first chunks)))
+      (let ((c1 (copy-chunk (first chunks)))
             merged)
-        (dolist (y (rest chunks) (nreverse (cons x merged)))
-          (cond ((adjacentp x y)
-                 (setf (chunk-end x) (chunk-end y)))
+        (dolist (c2 (rest chunks) (nreverse (cons c1 merged)))
+          (cond ((adjacentp c1 c2)
+                 (setf (chunk-end c1) (chunk-end c2)))
                 (t
-                 (push x merged)
-                 (setf x (copy-chunk y))))))))
+                 (push c1 merged)
+                 (setf c1 (copy-chunk c2))))))))
 
 (defun voffset-merge-p (voffset1 voffset2)
   "Returns T if BGZF virtual offsets are close enough to save disk
@@ -232,14 +279,36 @@ seeking forward a short distance."
                      "the first virtual offset must be at or before the second")
     (>= (+ coffset1 *voffset-merge-distance*) coffset2)))
 
-(defun make-bam-chunk-queue (index ref-num start end)
-  "Returns a queue of merged chunks for reference REF-NUM in INDEX,
+;; TODO -- allow chunk queue to be created from a list of start/end
+;; pairs on a reference. Collect all the relevant bins first.
+(defun make-bam-chunk-queue (index reference-id start end)
+  "Returns a queue of merged chunks for reference REFERENCE-ID in INDEX,
 between reference positions START and END."
-  (queue-append (make-queue) (merge-chunks
-                              (sort (mapcan (lambda (bin)
-                                              (coerce (bin-chunks bin) 'list))
-                                            (find-bins index ref-num start end))
-                                    #'< :key #'chunk-start))))
+  (queue-append (make-queue)
+                (merge-chunks
+                 (sort (mapcan (lambda (bin)
+                                 (coerce (bin-chunks bin) 'list))
+                               (find-bins index reference-id start end))
+                       #'< :key #'chunk-start))))
+
+;; Ranges are (reference-id start end)
+(defun make-bam-chunk-queue2 (index regions)
+  (let* ((bins (delete-duplicates (mapcan (lambda (region)
+                                            (apply #'find-bins index region))
+                                          regions)))
+         (chunks (mapcan (lambda (bin)
+                           (coerce (bin-chunks bin) 'list))
+                         bins)))
+    (queue-append (make-queue)
+                  (merge-chunks (sort chunks #'< :key #'chunk-start)))))
+
+(defun make-bam-chunks (index region)
+  (let* ((bins (find-bins index (region-ref region) (region-start region)
+                          (region-end region)))
+         (chunks (mapcan (lambda (bin)
+                           (coerce (bin-chunks bin) 'list))
+                         bins)))
+    (sort chunks #'< :key #'chunk-start)))
 
 (defun make-bam-chunk-input (bam chunks end)
   "Returns a generator function that uses a queue of index CHUNKS to
