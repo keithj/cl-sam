@@ -192,8 +192,8 @@ Returns:
 
 - The new position."
   (let ((stream (bgzf-stream bgzf))
-        (new-position (logand (ash position -16) #xffffffffffff))
-        (new-offset (logand position #xffff))
+        (new-position (bgzf-coffset position))
+        (new-offset (bgzf-uoffset position))
         (current-position (bgzf-position bgzf)))
     (cond ((and (bgzf-loaded-p bgzf)
                 (= current-position new-position))
@@ -207,7 +207,7 @@ Returns:
            ;; initialised
            (setf (bgzf-position bgzf) new-position
                  (bgzf-loaded-p bgzf) nil
-                 (bgzf-load-seek bgzf) new-offset)) 
+                 (bgzf-load-seek bgzf) new-offset))
           (t
            (error 'bgzf-io-error :text "failed to seek")))))
 
