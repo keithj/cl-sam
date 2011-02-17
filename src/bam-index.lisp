@@ -31,7 +31,8 @@
                                       :initial-contents '(66 65 73 1))
   "The BAI index file magic header bytes.")
 
-(defparameter *voffset-merge-distance* (expt 2 15)
+(defparameter *tree-deepening-boundaries* '(4681 585  73   9   1))
+(defparameter *voffset-merge-distance* (expt 2 14)
   "If two index chunks are this number of bytes or closer to each
 other, they should be merged.")
 
@@ -99,19 +100,7 @@ lie within a bin and are close together within the BAM file."
     (format stream "~d " (ref-index-id ref-index))
     (princ (remove-if #'null (ref-index-bins ref-index)) stream)
     (princ #\Space stream)
-    (labels ((rle (x &optional current (run-length 0))
-               (cond ((and (null x) (zerop run-length))
-                      nil)
-                     ((null x)
-                      (list (cons run-length current)))
-                     ((null current)
-                      (rle (rest x) (first x) 1))
-                     ((eql current (first x))
-                      (rle (rest x) current (1+ run-length)))
-                     (t
-                      (cons (cons run-length current)
-                            (rle (rest x) (first x) 1))))))
-      (princ (rle (coerce (ref-index-intervals ref-index) 'list)) stream))))
+    (princ (run-length-encode (ref-index-intervals ref-index)) stream)))
 
 (defun print-samtools-ref-index (ref-index stream)
   "Prints a string representation of REF-INDEX to STREAM."
@@ -126,19 +115,7 @@ lie within a bin and are close together within the BAM file."
               (samtools-ref-index-unmapped ref-index)))
     (princ (remove-if #'null (ref-index-bins ref-index)) stream)
     (princ #\Space stream)
-    (labels ((rle (x &optional current (run-length 0))
-               (cond ((and (null x) (zerop run-length))
-                      nil)
-                     ((null x)
-                      (list (cons run-length current)))
-                     ((null current)
-                      (rle (rest x) (first x) 1))
-                     ((eql current (first x))
-                      (rle (rest x) current (1+ run-length)))
-                     (t
-                      (cons (cons run-length current)
-                            (rle (rest x) (first x) 1))))))
-      (princ (rle (coerce (ref-index-intervals ref-index) 'list)) stream))))
+    (princ (run-length-encode (ref-index-intervals ref-index)) stream)))
 
 (defun print-bin (bin stream)
   "Prints a string representation of BIN to STREAM."
@@ -178,8 +155,6 @@ BAM-INDEX."
 (defun bin-chunk (bin chunk-num)
   "Returns the chunk number CHUNK-NUM in BIN."
   (svref (bin-chunks bin) chunk-num))
-
-(defparameter *tree-deepening-boundaries* '(4681 585  73   9   1))
 
 (defun max-bin-num (ref-length)
   (+ (1- (first *tree-deepening-boundaries*)) (ash ref-length -14)))
@@ -335,3 +310,22 @@ operations on the returned generator."
                           (when next
                             (bgzf-seek bam (chunk-start next)))
                           (setf chunk next))))))))))
+
+(defun run-length-encode (intervals)
+  "Returns a run-length encoded list representing INTERVALS, a BGAZ
+linear index. Each element of the list has a car of the run-length and
+a cdr of the BGZF file position. Used in printing text representations
+of the index."
+  (labels ((rle (x &optional current (run-length 0))
+             (cond ((and (null x) (zerop run-length))
+                    nil)
+                   ((null x)
+                    (list (cons run-length current)))
+                   ((null current)
+                    (rle (rest x) (first x) 1))
+                     ((eql current (first x))
+                      (rle (rest x) current (1+ run-length)))
+                     (t
+                      (cons (cons run-length current)
+                            (rle (rest x) (first x) 1))))))
+    (rle (coerce intervals 'list))))
