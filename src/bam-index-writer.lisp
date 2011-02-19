@@ -22,31 +22,45 @@
 ;;
 ;; Indexing algorithm:
 ;;
+;; get file position of the alignment start
+;;
 ;; foreach alignment
-;;   if alignment is unmapped
+;;   get alignment position
+;;
+;;   if alignment is unassigned (ref-id is -1)
+;;     count unassigned
+;;   else if alignment is unmapped (flag #x04 is set)
 ;;     count unmapped
 ;;   else
 ;;     count mapped
-;;     get alignment position
-;;     get alignment length on reference
+;;
+;;   file chunk start = file position before reading
+;;   file chunk end = file position after reading
+;;
+;;   if alignment position is not negative
 ;;     get the alignment bin number
-;;     get the current chunk start (bam-tell)
-;;     get the current chunk end (chunk start + size-tag + alignment bytes)
-;;       if current chunk is close to previous chunk
+;;     get the previous chunks for this bin
+;;     get file position of the alignment end
+;;     calculate file chunk of alignment
+;;     if current chunk is close to previous chunk
 ;;         extend previous chunk to current chunk end
 ;;       else
-;;         add current chunk to list
+;;         add current chunk to list for this bin
 ;;
-;;       get alignment interval
-;;       if chunk start for interval > current chunk start
+;;     get alignment length on reference
+;;     calculate intervals of alignment
+;;     foreach interval
+;;       if chunk start for interval < current chunk start
 ;;         chunk start for interval = current chunk start
 ;;
 ;; Notes:
 ;;
+;; Each time a new reference is encountered during indexing, a
+;; ref-index is created from the accumulated index data of the
+;; previous reference.
+
 ;; Unassigned reads are identified by a reference id of -1.
-;;
 ;; Unassigned reads are located at the end of a sorted BAM file.
-;;
 ;; Unmapped reads may be assigned to a reference, but may have a pos
 ;; of -1. Unmapped reads with a pos, have an alignment length of zero.
 ;;
