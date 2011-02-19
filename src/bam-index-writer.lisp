@@ -76,6 +76,8 @@
             (unassigned 0)
             (indices ()))
         (labels ((ref-len (ref-id)
+                   (check-arguments (assoc ref-id ref-meta) (ref-id)
+                                    "no such reference in this BAM file")
                    (second (assocdr ref-id ref-meta)))
                  (make-intervals (ref-id)
                    (make-array (ceiling (ref-len ref-id) +linear-bin-size+)
