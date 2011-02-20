@@ -19,26 +19,45 @@
 
 (in-package :sam-test)
 
-(addtest (cl-sam-tests) read-bam-index/1
+;; The suite will eventually contain fixtures for generated stock BAM
+;; files used across multiple tests.
+(deftestsuite bam-indexing-tests (cl-sam-tests)
+  ())
+
+(defun gen-bam (num-refs ref-len &rest args)
+  (let ((aln-gen (loop
+                    for ref-id from 0 below num-refs
+                    collect (apply #'alignment-generator ref-id
+                                   "read_group_0" args))))
+    (apply #'generate-bam-file (tmp-pathname
+                                :tmpdir (merge-pathnames "data")
+                                :type "bam") num-refs ref-len aln-gen)))
+
+(addtest (bam-indexing-tests) index-bam-file/1
   (let* ((num-refs 10)
          (ref-len 100000)
-         (aln-sources (loop
-                         for ref-id from 0 below num-refs
-                         collect (alignment-generator ref-id "read_group_0"
-                                                      :read-length 50
-                                                      :insert-length 150
-                                                      :step-size 100)))
-         (bam-file (apply #'generate-bam-file (tmp-pathname
-                                               :tmpdir (merge-pathnames "data")
-                                               :type "bam") num-refs ref-len
-                                               aln-sources))
+         (bam-file (gen-bam num-refs ref-len))
          (index (index-bam-file bam-file)))
     (ensure (probe-file bam-file))
-    (let ((expected 10))
-      (ensure (= expected num-refs)
+    (let ((n (length (bam-index-refs index))))
+      (ensure (= num-refs n)
               :report "Expected ~d refs, but found ~d"
-              :arguments (expected num-refs)))
+              :arguments (num-refs n)))
     (delete-file bam-file)))
+
+(addtest (bam-indexing-tests) read/write-bam-index/1
+  (let* ((num-refs 10)
+         (ref-len 100000)
+         (bam-file (gen-bam num-refs ref-len))
+         (index (index-bam-file bam-file))
+         (index-file (merge-pathnames (make-pathname :type "bai") bam-file)))
+    (ensure (probe-file bam-file))
+    (with-open-file (out index-file :direction :output :element-type 'octet)
+      (ensure (write-bam-index index out)))
+    (with-open-file (in index-file :element-type 'octet)
+      (let ((ensure (equalp index (read-bam-index in))))))
+    (delete-file bam-file)
+    (delete-file index-file)))
 
 ;; (let ((bam-file (tmp-pathname :tmpdir "/home/keith/" :type "bam"))
 ;;       (g1 (alignment-generator 0 "generated_group" :name-suffix "1"
