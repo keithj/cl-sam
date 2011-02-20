@@ -38,6 +38,8 @@
   (:export
    ;; Conditions
    #:bgzf-io-error
+   #:bam-error
+   #:bam-sort-error
 
    ;; BGZF handle API
    #:bgzf
@@ -202,7 +204,9 @@
    #:view-sam
    #:flagstat
    #:repair-mapping-flags
-   #:generate-bam-file)
+   #:generate-bam-file
+   #:generate-reference-file
+   #:alignment-generator)
   (:documentation "cl-sam is a Common Lisp toolkit for manipulation of
 DNA sequence alignment data stored in the Sequence Alignment/Map (SAM)
 format <http://samtools.sourceforge.net>. The SAM specficiation

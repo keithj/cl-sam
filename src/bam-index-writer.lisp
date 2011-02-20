@@ -118,8 +118,8 @@
                          (pos (alignment-position aln))
                          (flag (alignment-flag aln)))
                      (if (and (= previous-ref ref-id) (> previous-pos pos))
-                         (error "alignments out of order: ~a > ~a"
-                                previous-pos pos)
+                         (bam-sort-error previous-ref previous-pos ref-id pos
+                                         "previous position > current")
                          (setf previous-pos pos))
                      (cond ((and (/= previous-ref ref-id) (minusp ref-id))
                             (add-ref-index previous-ref ref-start file-pos
@@ -128,7 +128,10 @@
                                                    (1+ last-interval)))
                             (setf previous-ref ref-id))
                            ((and (/= previous-ref ref-id) (minusp previous-ref))
-                            (error "alignments out of order"))
+                            (bam-sort-error previous-ref previous-pos ref-id pos
+                                            (txt "alignment to reference ~a"
+                                                 "after unassigned reads")
+                                            ref-id))
                            ((/= previous-ref ref-id)
                             (add-ref-index previous-ref ref-start file-pos
                                            chunks

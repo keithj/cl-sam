@@ -29,3 +29,28 @@
                      (errno-of condition) (message-of condition))))
   (:documentation "A condition raised when an error occurs reading
   from or writing to a BGZF file."))
+
+(define-condition bam-error (error formatted-condition)
+  ()
+  (:documentation "The parent type of all BAM  error conditions."))
+
+(define-condition bam-sort-error (bam-error)
+  ((prev-position :initform nil
+                  :initarg :prev-position
+                  :reader prev-position-of)
+   (position :initform nil
+             :initarg :position
+             :reader position-of)
+   (prev-reference :initform nil
+                   :initarg :prev-reference
+                   :reader prev-reference-of)
+   (reference :initform nil
+              :initarg :reference
+              :reader reference-of))
+  (:report (lambda (condition stream)
+             (format stream "BAM sort error ~a ~a~@[: ~a~]"
+                     (list :previous (prev-reference-of condition)
+                           (prev-position-of condition))
+                     (list :current (reference-of condition)
+                           (position-of condition))
+                     (message-of condition)))))
