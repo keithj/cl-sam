@@ -21,6 +21,8 @@
 
 (defconstant +tag-size+ 2
   "The size of a BAM auxilliary tag in bytes.")
+(defconstant +alignment-size-tag+ 4
+  "The size of the BAM alignment size indicator.")
 (defconstant +null-byte+ #x00
   "The termination byte for BAM strings.")
 (defconstant +unknown-quality+ #xff
@@ -38,6 +40,86 @@
 (defvar *invalid-read-name-chars*
   (make-array 4 :element-type 'base-char
               :initial-contents '(#\Space #\Tab #\Linefeed #\Return)))
+
+(defmacro with-bam ((var (&optional header num-refs ref-meta) filespec
+                         &rest args &key (compress t) (null-padding 0)
+                         index ref-num (start 0) (end (expt 2 29))
+                         &allow-other-keys)
+                    &body body)
+  "Evaluates BODY with VAR bound to a new BAM generator function on
+pathname designator FILESPEC. The direction (:input versus :output) is
+determined by the stream-opening arguments in ARGS. The standard
+generator interface functions NEXT and HAS-MORE-P may be used in
+operations on the returned generator.
+
+On reading, HEADER, NUM-REFS and REF-META will be automatically bound
+to the BAM file metadata i.e. the metadata are read automatically and
+the iterator positioned before the first alignment record.
+
+Optionally, iteration may be restricted to a specific reference,
+designated by REF-NUM and to alignments that start between reference
+positions START and END. Furthermore, a BAM-INDEX object INDEX may be
+provided to allow the stream to seek directly to the desired region of
+the file.
+
+On writing, HEADER, NUM-REFS and REF-META should be bound to
+appropriate values for the BAM file metadata, which will be
+automatically written to the underlying stream.
+
+The COMPRESS and NULL-PADDING keyword arguments are only applicable on
+writing where they control whether the header block should be
+compressed and whether the header string should be padded with nulls
+to allow space for expansion.
+
+For example:
+
+To count all records in a BAM file:
+
+;;; (with-bam (in (header) \"in.bam\")
+;;;   (declare (ignore header))
+;;;   (loop
+;;;      while (has-more-p in)
+;;;      count (next in)))
+
+To copy only records with a mapping quality of >= 30 to another BAM
+file:
+
+;;; (with-bam (in (h n r) \"in.bam\")
+;;;   (with-bam (out (h n r) \"out.bam\" :direction :output)
+;;;     (let ((q30 (discarding-if (lambda (x)
+;;;                                 (< (mapping-quality x) 30)) in)))
+;;;       (loop
+;;;          while (has-more-p q30)
+;;;          do (consume out (next q30))))))"
+  (with-gensyms (bgzf)
+    (let ((default-header (with-output-to-string (s)
+                            (write-sam-header
+                             `((:HD (:VN . ,*sam-version*))) s))))
+      `(with-bgzf (,bgzf ,filespec ,@(remove-key-values
+                                      '(:compress :null-padding :index
+                                        :ref-num :start :end) args))
+         ,@(if (search '(:direction :output) args)
+               `((write-bam-meta ,bgzf
+                                 ,(or header default-header)
+                                 ,(or num-refs 0) ,ref-meta
+                                 :compress ,compress
+                                 :null-padding ,null-padding)
+                 (let ((,var (make-bam-output ,bgzf)))
+                   ,@body))
+               `((multiple-value-bind (,@(when header `(,header))
+                                       ,@(when num-refs `(,num-refs))
+                                       ,@(when ref-meta `(,ref-meta)))
+                     (read-bam-meta ,bgzf)
+                   ,@(cond (ref-meta
+                            `((declare (ignorable ,header ,num-refs))))
+                           (num-refs
+                            `((declare (ignorable ,header)))))
+                   (let ((,var (make-bam-input ,bgzf
+                                               :index ,index
+                                               :ref-num ,ref-num
+                                               :start ,start
+                                               :end ,end)))
+                     ,@body))))))))
 
 (defgeneric encode-alignment-tag (value tag vector index)
   (:documentation "Performs binary encoding of VALUE into VECTOR under
@@ -975,3 +1057,11 @@ FLAG in ALN, with MESSAGE."
              :field flag
              :format-control "invalid flag ~b set: ~a"
              :format-arguments (list flag message))))
+
+(defun bam-sort-error (previous-ref previous-pos ref pos &optional message
+                       &rest message-arguments)
+  (error 'bam-sort-error
+         :prev-reference previous-ref :reference ref
+         :prev-position previous-pos :position pos
+         :format-control message
+         :format-arguments message-arguments))
