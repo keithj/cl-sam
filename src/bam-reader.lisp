@@ -73,7 +73,8 @@ file:
             (t
              (let ((fn (let ((current (read-alignment bam)))
                          (defgenerator
-                             (more (not (null current)))
+                             (more (and current
+                                        (= ref-num (reference-id current))))
                              (next (prog1
                                        current
                                      (setf current (read-alignment bam))))))))
