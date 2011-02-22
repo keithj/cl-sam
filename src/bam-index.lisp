@@ -173,6 +173,7 @@ regions."
                           :initial-element 0)))
     (when (< start end)
       (let ((end (1- end)))
+        (setf (sbit bins 0) 1)
         (loop
            for  shift in '( -14 -17 -20 -23 -26)
            for offset in '(4681 585  73   9   1) ; tree deepening boundaries
@@ -221,14 +222,14 @@ between reference positions START and END."
       collect bin)))
 
 (defun adjacentp (chunk1 chunk2)
-  "Returns T if BAM index CHUNK1 and CHUNK2 are adjacent. In this
+   "Returns T if BAM index CHUNK1 and CHUNK2 are adjacent. In this
 context this means that they are sequential in a file stream and close
 enough together for it to be more efficient to continue reading across
 the intervening bytes, rather than seeking."
-  (check-arguments (<= (chunk-end chunk1) (chunk-start chunk2))
-                   (chunk1 chunk2)
-                   "chunk1 must end at or before the start of chunk2")
-  (voffset-merge-p (chunk-end chunk1) (chunk-start chunk2)))
+   (check-arguments (<= (chunk-end chunk1) (chunk-start chunk2))
+                    (chunk1 chunk2)
+                    "chunk1 must end at or before the start of chunk2")
+   (voffset-merge-p (chunk-end chunk1) (chunk-start chunk2)))
 
 (defun merge-chunks (chunks)
   "Returns a new list of BAM index chunks created by merging members
