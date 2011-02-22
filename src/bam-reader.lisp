@@ -57,7 +57,9 @@ file:
   (flet ((out-of-bounds-p (aln)
            (or (not aln)
                (let ((pos (alignment-position aln)))
-                 (or (< pos start) (> pos end))))))
+                 (or (< pos start) (> pos end)))))
+         (ref-match-p (aln)
+           (and aln (= ref-num (reference-id aln)))))
     (let ((chunks (and index (make-bam-chunk-queue index ref-num start end))))
       (cond ((and chunks (queue-empty-p chunks))
              (defgenerator
@@ -71,13 +73,17 @@ file:
              (let ((fn (make-bam-chunk-input bam chunks end)))
                (discarding-if #'out-of-bounds-p fn)))
             (t
-             (let ((fn (let ((current (read-alignment bam)))
+             (let ((fn (let* ((current (read-alignment bam))
+                              (ref-matched-p (ref-match-p current)))
                          (defgenerator
-                             (more (and current
-                                        (= ref-num (reference-id current))))
+                             (more (or (and current (not ref-matched-p))
+                                       (ref-match-p current)))
                              (next (prog1
                                        current
-                                     (setf current (read-alignment bam))))))))
+                                     (setf current (read-alignment bam))
+                                     (when (and (not ref-matched-p)
+                                                (ref-match-p current))
+                                       (setf ref-matched-p t))))))))
                (discarding-if #'out-of-bounds-p fn)))))))
 
 ;; One region -> one reference, start & end, many chunks. Iterate over
