@@ -19,73 +19,6 @@
 
 (in-package :sam)
 
-(defun make-bam-input (bam &key index ref-num (start 0) (end (expt 2 29)))
-  "Returns a generator function that returns BAM alignment records for
-BAM stream BAM. Optionally, iteration may be restricted to a specific
-reference, designated by REF-NUM and to alignments that start between
-reference positions START and END. Furthermore, a BAM-INDEX object
-INDEX may be provided to allow the stream to seek directly to the
-desired region of the file. The standard generator interface functions
-NEXT and HAS-MORE-P may be used in operations on the returned
-generator.
-
-For example:
-
-To count all records in a BAM file:
-
-;;; (with-bgzf (bam \"in.bam\")
-;;;   (read-bam-meta bam)
-;;;   (let ((in (make-bam-input bam)))
-;;;     (loop
-;;;        while (has-more-p in)
-;;;        count (next in))))
-
-To copy only records with a mapping quality of >= 30 to another BAM
-file:
-
-;;; (with-bgzf (bam-in \"in.bam\")
-;;;   (with-bgzf (bam-out \"out.bam\" :direction :output)
-;;;     (multiple-value-bind (header num-refs ref-meta)
-;;;         (read-bam-meta bam-in)
-;;;       (write-bam-meta bam-out header num-refs ref-meta))
-;;;     (let ((fn (discarding-if (lambda (x)
-;;;                                (< (mapping-quality x) 30))
-;;;                              (make-bam-input bam-in))))
-;;;       (loop
-;;;          while (has-more-p fn)
-;;;          do (write-alignment bam-out (next fn))))))"
-  (flet ((out-of-bounds-p (aln)
-           (or (not aln)
-               (let ((pos (alignment-position aln)))
-                 (or (< pos start) (> pos end)))))
-         (ref-match-p (aln)
-           (and aln (= ref-num (reference-id aln)))))
-    (let ((chunks (and index (make-bam-chunk-queue index ref-num start end))))
-      (cond ((and chunks (queue-empty-p chunks))
-             (defgenerator
-                 (more nil)
-                 (next nil)))
-            (chunks
-             (bgzf-seek bam (max (aref (ref-index-intervals
-                                        (ref-index index ref-num))
-                                       (region-to-interval start))
-                                 (chunk-start (queue-first chunks))))
-             (let ((fn (make-bam-chunk-input bam chunks end)))
-               (discarding-if #'out-of-bounds-p fn)))
-            (t
-             (let ((fn (let* ((current (read-alignment bam))
-                              (ref-matched-p (ref-match-p current)))
-                         (defgenerator
-                             (more (or (and current (not ref-matched-p))
-                                       (ref-match-p current)))
-                             (next (prog1
-                                       current
-                                     (setf current (read-alignment bam))
-                                     (when (and (not ref-matched-p)
-                                                (ref-match-p current))
-                                       (setf ref-matched-p t))))))))
-               (discarding-if #'out-of-bounds-p fn)))))))
-
 ;; One region -> one reference, start & end, many chunks. Iterate over
 ;; regions, making chunk queues. When changing region, only seek if the
 ;; current position is too far from the next chunk. This means we need
@@ -104,14 +37,83 @@ file:
 ;;     (with-bam (bam ()  "/home/keith/index_test.bam")
 ;;       (make-bam-region-input bam index regions))))
 
-(defun make-bam-region-input (bam index regions)
+(defun make-bam-full-scan-input (bam)
+  "Returns a generator function that returns BAM alignment records for
+BAM stream BAM by scanning the entire stream. This to be used in cases
+where a full scan is necessary, or as a fallback when neither index,
+nor regions are available. The standard generator interface functions
+NEXT and HAS-MORE-P may be used in operations on the returned
+generator."
+  (let ((aln (read-alignment bam)))
+    (defgenerator
+        (more (not (null aln)))
+        (next (prog1
+                  aln
+                (setf aln (read-alignment bam)))))))
+
+(defun make-bam-scan-input (bam regions)
+  "Returns a generator function that returns BAM alignment records for
+BAM stream BAM by scanning for alignments in the list of REGIONS. This
+to be used in cases where a full scan is necessary, or as a fallback
+when an index is not available. The standard generator interface
+functions NEXT and HAS-MORE-P may be used in operations on the
+returned generator."
   (let ((regions (queue-append (make-queue) regions))
-        (chunks (make-queue))
-        chunk ref-num rstart rend)
+        ref-id rstart rend)
     (flet ((next-region ()
              (unless (queue-empty-p regions)
                (let ((region (queue-dequeue regions)))
-                 (setf ref-num (region-ref region)
+                 (setf ref-id (region-ref region)
+                       rstart (region-start region)
+                       rend (region-end region)))))
+           (find-alignment ()
+             (loop
+                for aln = (read-alignment bam)
+                until (or (null aln)
+                          (and (= ref-id (reference-id aln))
+                               (<= rstart (alignment-position aln) rend)))
+                finally (return aln)))
+           (before-region-p (aln)
+             (let ((id (reference-id aln)))
+               (or (< id ref-id)
+                   (and (= id ref-id) (< (alignment-position aln) rstart)))))
+               (after-region-p (aln)
+                 (or (> (reference-id aln) ref-id)
+                     (> (alignment-position aln) rend))))
+      (cond ((queue-empty-p regions)
+             (defgenerator
+                 (more nil)
+                 (next nil)))
+            (t
+             (next-region)
+             (let ((aln (find-alignment)))
+               (defgenerator
+                   (more (not (null aln)))
+                   (next (prog1
+                             aln
+                           (let ((next (read-alignment bam)))
+                             (cond ((null next)
+                                    (setf aln nil))
+                                   ((after-region-p next)
+                                    (next-region)
+                                    (setf aln (find-alignment)))
+                                   ((before-region-p aln)
+                                    (setf aln (find-alignment)))
+                                   (t
+                                    (setf aln next)))))))))))))
+
+(defun make-bam-index-input (bam index regions)
+  "Returns a generator function that returns BAM alignment records for
+BAM stream BAM by scanning for alignments in the list of REGIONS. The
+standard generator interface functions NEXT and HAS-MORE-P may be used
+in operations on the returned generator."
+  (let ((regions (queue-append (make-queue) regions))
+        (chunks (make-queue))
+        chunk ref-id rstart rend)
+    (flet ((next-region ()
+             (unless (queue-empty-p regions)
+               (let ((region (queue-dequeue regions)))
+                 (setf ref-id (region-ref region)
                        rstart (region-start region)
                        rend (region-end region))
                  (queue-clear chunks)
@@ -121,41 +123,39 @@ file:
                    ;; the next chunk is close enough to the current
                    ;; bgzf position such that a seek is not necessary
                    (setf chunk (queue-dequeue chunks))
-                   (bgzf-seek bam (max (aref (ref-index-intervals
-                                              (ref-index index ref-num))
-                                             (region-to-interval rstart))
+                   (bgzf-seek bam (max (find-interval
+                                        (ref-index index ref-id) rstart)
                                        (chunk-start chunk)))))))
            (next-chunk ()
              (unless (queue-empty-p chunks)
                (setf chunk (queue-dequeue chunks))
-               (bgzf-seek bam (chunk-start chunk))))
-           (out-of-bounds-p (aln)
-             (or (null aln)
-                 (let ((pos (alignment-position aln)))
-                   (or (< pos rstart) (> pos rend))))))
-      (next-region)
-      (discarding-if
-       #'out-of-bounds-p
-       (let ((current (read-alignment bam)))
-         (defgenerator
-             (more (not (null current)))
-             (next (prog1
-                       current
-                     (if (null chunk)
-                         (setf current nil)
-                         (let ((aln (read-alignment bam)))
-                           (cond ((null aln)
-                                  ;; Error if more regions
-                                  (setf current nil))
-                                 ((> (alignment-position aln) rend)
-                                  (next-region)
-                                  (setf current (read-alignment bam)))
-                                 (t
-                                  (setf current aln)))
-                           (when (>= (bgzf-tell bam) (chunk-end chunk))
-                             (if (queue-empty-p chunks)
-                                 (next-region)
-                                 (next-chunk)))))))))))))
+               (bgzf-seek bam (chunk-start chunk)))))
+      (cond ((queue-empty-p regions)
+             (defgenerator
+                 (more nil)
+                 (next nil)))
+            (t
+             (next-region)
+             (let ((aln (read-alignment bam)))
+               (defgenerator
+                   (more (not (null aln)))
+                   (next (prog1
+                             aln
+                           (setf aln (do ((next (read-alignment bam)
+                                                (read-alignment bam))
+                                          (endp nil))
+                                         ((or endp (null next)
+                                              (null chunk)) next)
+                                       (let ((pos (alignment-position next)))
+                                         (cond ((< rstart pos rend)
+                                                (setf endp t))
+                                               ((> pos rend)
+                                                (next-region)))
+                                         (when (>= (bgzf-tell bam)
+                                                   (chunk-end chunk))
+                                           (if (queue-empty-p chunks)
+                                               (next-region)
+                                               (next-chunk)))))))))))))))
 
 (defun make-region< (ref-meta)
   "Returns a new comparator function which sorts regions according to

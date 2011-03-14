@@ -156,6 +156,9 @@ BAM-INDEX."
   "Returns the chunk number CHUNK-NUM in BIN."
   (svref (bin-chunks bin) chunk-num))
 
+(defun find-interval (ref-index start)
+  (aref (ref-index-intervals ref-index) (region-to-interval start)))
+
 (defun max-bin-num (ref-length)
   (+ (1- (first *tree-deepening-boundaries*)) (ash ref-length -14)))
 
@@ -257,26 +260,26 @@ seeking forward a short distance."
 
 ;; TODO -- allow chunk queue to be created from a list of start/end
 ;; pairs on a reference. Collect all the relevant bins first.
-(defun make-bam-chunk-queue (index reference-id start end)
-  "Returns a queue of merged chunks for reference REFERENCE-ID in INDEX,
-between reference positions START and END."
-  (queue-append (make-queue)
-                (merge-chunks
-                 (sort (mapcan (lambda (bin)
-                                 (coerce (bin-chunks bin) 'list))
-                               (find-bins index reference-id start end))
-                       #'< :key #'chunk-start))))
+;; (defun make-bam-chunk-queue (index reference-id start end)
+;;   "Returns a queue of merged chunks for reference REFERENCE-ID in INDEX,
+;; between reference positions START and END."
+;;   (queue-append (make-queue)
+;;                 (merge-chunks
+;;                  (sort (mapcan (lambda (bin)
+;;                                  (coerce (bin-chunks bin) 'list))
+;;                                (find-bins index reference-id start end))
+;;                        #'< :key #'chunk-start))))
 
 ;; Ranges are (reference-id start end)
-(defun make-bam-chunk-queue2 (index regions)
-  (let* ((bins (delete-duplicates (mapcan (lambda (region)
-                                            (apply #'find-bins index region))
-                                          regions)))
-         (chunks (mapcan (lambda (bin)
-                           (coerce (bin-chunks bin) 'list))
-                         bins)))
-    (queue-append (make-queue)
-                  (merge-chunks (sort chunks #'< :key #'chunk-start)))))
+;; (defun make-bam-chunk-queue2 (index regions)
+;;   (let* ((bins (delete-duplicates (mapcan (lambda (region)
+;;                                             (apply #'find-bins index region))
+;;                                           regions)))
+;;          (chunks (mapcan (lambda (bin)
+;;                            (coerce (bin-chunks bin) 'list))
+;;                          bins)))
+;;     (queue-append (make-queue)
+;;                   (merge-chunks (sort chunks #'< :key #'chunk-start)))))
 
 (defun make-bam-chunks (index region)
   (let* ((bins (find-bins index (region-ref region) (region-start region)
@@ -286,34 +289,34 @@ between reference positions START and END."
                          bins)))
     (sort chunks #'< :key #'chunk-start)))
 
-(defun make-bam-chunk-input (bam chunks end)
-  "Returns a generator function that uses a queue of index CHUNKS to
-iterate over records in BAM stream BAM. The standard generator
-interface functions, CURRENT, NEXT and HAS-MORE-P may be used in
-operations on the returned generator."
-  (let ((chunk (queue-dequeue chunks))
-        (current (read-alignment bam)))
-    (defgenerator
-        (more (not (null current)))
-        (next (prog1
-                  current
-                (if (null chunk)
-                    (setf current nil)
-                    (let ((aln (read-alignment bam)))
-                      (setf current (cond ((null aln)
-                                           nil)
-                                          ((> (alignment-position aln) end)
-                                           nil)
-                                          (t
-                                           aln)))
-                      (when (>= (bgzf-tell bam) (chunk-end chunk))
-                        (let ((next (queue-dequeue chunks)))
-                          (when next
-                            (bgzf-seek bam (chunk-start next)))
-                          (setf chunk next))))))))))
+;; (defun make-bam-chunk-input (bam chunks end)
+;;   "Returns a generator function that uses a queue of index CHUNKS to
+;; iterate over records in BAM stream BAM. The standard generator
+;; interface functions, CURRENT, NEXT and HAS-MORE-P may be used in
+;; operations on the returned generator."
+;;   (let ((chunk (queue-dequeue chunks))
+;;         (current (read-alignment bam)))
+;;     (defgenerator
+;;         (more (not (null current)))
+;;         (next (prog1
+;;                   current
+;;                 (if (null chunk)
+;;                     (setf current nil)
+;;                     (let ((aln (read-alignment bam)))
+;;                       (setf current (cond ((null aln)
+;;                                            nil)
+;;                                           ((> (alignment-position aln) end)
+;;                                            nil)
+;;                                           (t
+;;                                            aln)))
+;;                       (when (>= (bgzf-tell bam) (chunk-end chunk))
+;;                         (let ((next (queue-dequeue chunks)))
+;;                           (when next
+;;                             (bgzf-seek bam (chunk-start next)))
+;;                           (setf chunk next))))))))))
 
 (defun run-length-encode (intervals)
-  "Returns a run-length encoded list representing INTERVALS, a BGAZ
+  "Returns a run-length encoded list representing INTERVALS, a BGZF
 linear index. Each element of the list has a car of the run-length and
 a cdr of the BGZF file position. Used in printing text representations
 of the index."

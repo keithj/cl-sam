@@ -43,8 +43,7 @@
 
 (defmacro with-bam ((var (&optional header num-refs ref-meta) filespec
                          &rest args &key (compress t) (null-padding 0)
-                         index ref-num (start 0) (end (expt 2 29))
-                         &allow-other-keys)
+                         index regions &allow-other-keys)
                     &body body)
   "Evaluates BODY with VAR bound to a new BAM generator function on
 pathname designator FILESPEC. The direction (:input versus :output) is
@@ -71,12 +70,23 @@ writing where they control whether the header block should be
 compressed and whether the header string should be padded with nulls
 to allow space for expansion.
 
+A list REGIONS may be supplied to limit the returned alignments to
+specific references and reference coordinates. REGIONS may be region
+objects or region designators in the form of list tuples
+
+;;; (<reference designator> start end)
+
+where a reference designator is either the reference name string or
+its identifier number in the BAM file. REGIONS will be normalised
+automatically by sorting according to reference position in the BAM
+file (according to the BAM metadata) and then by start and
+end. Overlapping regions will be merged.
+
 For example:
 
 To count all records in a BAM file:
 
-;;; (with-bam (in (header) \"in.bam\")
-;;;   (declare (ignore header))
+;;; (with-bam (in () \"in.bam\")
 ;;;   (loop
 ;;;      while (has-more-p in)
 ;;;      count (next in)))
@@ -84,42 +94,48 @@ To count all records in a BAM file:
 To copy only records with a mapping quality of >= 30 to another BAM
 file:
 
-;;; (with-bam (in (h n r) \"in.bam\")
-;;;   (with-bam (out (h n r) \"out.bam\" :direction :output)
+;;; (with-bam (in (header n ref-meta) \"in.bam\")
+;;;   (with-bam (out (header n rer-meta) \"out.bam\" :direction :output)
 ;;;     (let ((q30 (discarding-if (lambda (x)
 ;;;                                 (< (mapping-quality x) 30)) in)))
 ;;;       (loop
 ;;;          while (has-more-p q30)
 ;;;          do (consume out (next q30))))))"
-  (with-gensyms (bgzf)
-    (let ((default-header (with-output-to-string (s)
-                            (write-sam-header
-                             `((:HD (:VN . ,*sam-version*))) s))))
-      `(with-bgzf (,bgzf ,filespec ,@(remove-key-values
-                                      '(:compress :null-padding :index
-                                        :ref-num :start :end) args))
-         ,@(if (search '(:direction :output) args)
-               `((write-bam-meta ,bgzf
-                                 ,(or header default-header)
-                                 ,(or num-refs 0) ,ref-meta
-                                 :compress ,compress
-                                 :null-padding ,null-padding)
-                 (let ((,var (make-bam-output ,bgzf)))
-                   ,@body))
-               `((multiple-value-bind (,@(when header `(,header))
-                                       ,@(when num-refs `(,num-refs))
-                                       ,@(when ref-meta `(,ref-meta)))
-                     (read-bam-meta ,bgzf)
-                   ,@(cond (ref-meta
-                            `((declare (ignorable ,header ,num-refs))))
-                           (num-refs
-                            `((declare (ignorable ,header)))))
-                   (let ((,var (make-bam-input ,bgzf
-                                               :index ,index
-                                               :ref-num ,ref-num
-                                               :start ,start
-                                               :end ,end)))
-                     ,@body))))))))
+  (with-gensyms (bgzf hdr nrefs rmeta)
+    (let ((header (or header `,hdr))
+          (num-refs (or num-refs `,nrefs))
+          (ref-meta (or ref-meta `,rmeta)))
+      (let ((default-header (with-output-to-string (s)
+                              (write-sam-header
+                               `((:HD (:VN . ,*sam-version*))) s))))
+        `(with-bgzf (,bgzf ,filespec ,@(remove-key-values
+                                        '(:compress :null-padding :index
+                                          :regions) args))
+           ,@(if (search '(:direction :output) args)
+                 `((write-bam-meta ,bgzf
+                                   ,(or header default-header)
+                                   ,(or num-refs 0) ,ref-meta
+                                   :compress ,compress
+                                   :null-padding ,null-padding)
+                   (let ((,var (make-bam-output ,bgzf)))
+                     ,@body))
+                 `((multiple-value-bind (,header ,num-refs ,ref-meta)
+                       (read-bam-meta ,bgzf)
+                     ,@(cond (ref-meta
+                              `((declare (ignorable ,header ,num-refs))))
+                             (num-refs
+                              `((declare (ignorable ,header)))))
+                     (let ((,var (cond ((and ,index ,regions)
+                                        (make-bam-index-input
+                                         ,bgzf ,index (normalise-regions
+                                                       ,regions ,ref-meta)))
+                                       (,regions
+                                        (make-bam-scan-input
+                                         ,bgzf (normalise-regions
+                                                ,regions ,ref-meta)))
+                                       (t
+                                        (make-bam-full-scan-input ,bgzf)))))
+                       ,@body)))))))))
 
 (defgeneric encode-alignment-tag (value tag vector index)
   (:documentation "Performs binary encoding of VALUE into VECTOR under

@@ -35,7 +35,7 @@
 
 (addtest (bam-indexing-tests) index-bam-file/1
   (let* ((num-refs 10)
-         (ref-len 100000)
+         (ref-len 1000)
          (bam-file (gen-bam num-refs ref-len))
          (index (index-bam-file bam-file)))
     (ensure (probe-file bam-file))
@@ -59,6 +59,26 @@
     (delete-file bam-file)
     (delete-file index-file)))
 
+(addtest (bam-indexing-tests) read-bam-range/1
+  (let* ((num-refs 1)
+         (ref-len 100000)
+         (bam-file (gen-bam num-refs ref-len :end ref-len))
+         (index (index-bam-file bam-file))
+         (index-file (merge-pathnames (make-pathname :type "bai") bam-file)))
+    (with-bam (bam () bam-file :index index :regions '((0 1000 1100)))
+      (ensure (= 11 (loop
+                       while (has-more-p bam)
+                       count (next bam))))))
+
+;; (with-bam-index (index "/home/keith/index_test.bam.bai")
+;;   (let ((regions (mapcar (lambda (x)
+;;                            (apply #'region x)) '((1 1000 1010)
+;;                                                  (1 1000000 2000000)
+;;                                                  (1 1000 2000)
+;;                                                  (2 1000 1000000)))))
+;;     (with-bam (bam ()  "/home/keith/index_test.bam")
+;;       (make-bam-region-input bam index regions))))
+
 ;; (let ((bam-file (tmp-pathname :tmpdir "/home/keith/" :type "bam"))
 ;;       (g1 (alignment-generator 0 "generated_group" :name-suffix "1"
 ;;                                :insert-length 100
@@ -74,3 +94,4 @@
 ;;                            "ref_0" 100000 (lambda ()
 ;;                                            #\a))
 ;;   (generate-bam-file bam-file 1 100000 g1 g2 g3))
+)

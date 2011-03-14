@@ -148,7 +148,7 @@ Returns
                       i (+ step-size i))
                 (values read1 read2))))))
 
-(defun generate-bam-file (filespec num-refs ref-length &rest read-generators)
+(defun generate-bam-file (filespec num-refs ref-length &rest aln-generators)
   "Writes a very uniform BAM file to the file denoted by pathname
 designator FILESPEC, or testing purposes."
   (check-arguments (and (integerp num-refs) (plusp num-refs)) (num-refs)
@@ -170,7 +170,7 @@ designator FILESPEC, or testing purposes."
                              collect (sq-record (second m) (third m)))) s))))
     (with-bam (bam (header num-refs ref-meta) tmp :direction :output
                    :if-exists :supersede)
-      (dolist (fn read-generators)
+      (dolist (fn aln-generators)
         (loop
            while (has-more-p fn)
            do (multiple-value-bind (fwd rev)
