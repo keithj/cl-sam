@@ -59,16 +59,28 @@
     (delete-file bam-file)
     (delete-file index-file)))
 
+;; last chunk ends at 162913:0
+
 (addtest (bam-indexing-tests) read-bam-range/1
   (let* ((num-refs 1)
          (ref-len 100000)
          (bam-file (gen-bam num-refs ref-len :end ref-len))
-         (index (index-bam-file bam-file))
-         (index-file (merge-pathnames (make-pathname :type "bai") bam-file)))
-    (with-bam (bam () bam-file :index index :regions '((0 1000 1100)))
-      (ensure (= 11 (loop
-                       while (has-more-p bam)
-                       count (next bam))))))
+         (index (index-bam-file bam-file)))
+    (flet ((count-in-region (&rest regions)
+             (with-bam (bam () bam-file :index index
+                            :regions regions)
+               (loop
+                  while (has-more-p bam)
+                  count (next bam)))))
+      (mapcar (lambda (region expected)
+                (let ((count (count-in-region region)))
+                  (ensure (= expected count)
+                          :report "expected ~d, but found ~d"
+                          :arguments (expected count))))
+              (loop
+                 for i from 0 to 90000 by 10000
+                 collect (list 0 i (+ i 9999)))
+              '(1971 2009 2009 2009 2009 2009 2009 2009 2009 1968)))))
 
 ;; (with-bam-index (index "/home/keith/index_test.bam.bai")
 ;;   (let ((regions (mapcar (lambda (x)
@@ -94,4 +106,3 @@
 ;;                            "ref_0" 100000 (lambda ()
 ;;                                            #\a))
 ;;   (generate-bam-file bam-file 1 100000 g1 g2 g3))
-)
