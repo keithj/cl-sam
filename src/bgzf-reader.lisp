@@ -45,7 +45,7 @@
                   for pos = (file-position stream)
                   for bgz = (read-bgz-member stream (bgzf-util-buffer bgzf))
                   until (or (null bgz)                      ; eof
-                            (plusp (bgz-member-isize bgz))) ; skip if empty
+                            (plusp (bgz-member-isize bgz))) ; not empty
                   finally (if bgz
                               (let ((udata (make-array (bgz-member-isize bgz)
                                                        :element-type 'octet
@@ -57,7 +57,9 @@
                                       (bgzf-offset bgzf) (bgzf-load-seek bgzf)
                                       (bgzf-load-seek bgzf) 0)
                                 (return udata))
-                              (setf (bgzf-eof bgzf) t)))))
+                              (setf (bgzf-eof bgzf) t
+                                    (bgzf-position bgzf) (file-position stream)
+                                    (bgzf-offset bgzf) 0)))))
       (unless (bgzf-loaded-p bgzf)
         (inflate-from-bgz)
         (setf (bgzf-loaded-p bgzf) t))
