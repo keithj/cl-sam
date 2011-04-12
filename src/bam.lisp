@@ -473,6 +473,11 @@ sequence of the first base of the clipped read."
      for (op . len) in (alignment-cigar aln)
      when (member op '(:d :m :n := :x)) sum len))
 
+(defun alignment-reference-end (aln)
+  "Returns the end position of the alignment on the
+reference. Requires decoding the CIGAR string."
+  (1- (+ (alignment-position aln) (alignment-reference-length aln))))
+
 (declaim (inline read-name-length))
 (defun read-name-length (aln)
   "Returns the length in ASCII characters of the read name of ALN."

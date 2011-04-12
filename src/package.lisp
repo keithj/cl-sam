@@ -85,6 +85,7 @@
    ;; Low-level BAM API
    #:reference-id
    #:alignment-position
+   #:alignment-reference-end
    #:read-name-length
    #:mapping-quality
    #:alignment-bin
