@@ -65,6 +65,11 @@
 ;; of -1. Unmapped reads with a pos, have an alignment length of zero.
 ;;
 
+;; Note that samtools records its terminating index block position as
+;; the end of the BGZF EOF marker. Picard records its terminating
+;; index block position as the end of the last block that contained
+;; data i.e. the block prior to the BGZF EOF marker.
+
 (defun index-bam-file (filespec)
   "Returns a new BAM-INDEX object, given pathname designator FILESPEC."
   (with-bgzf (bam filespec)
@@ -107,8 +112,7 @@
                 (eof nil))
                (eof (%make-bam-index num-refs indices unassigned))
             (cond ((and (null aln) (zerop unassigned))
-                   (add-ref-index previous-ref ref-start (bgzf-tell bam)
-                                  chunks
+                   (add-ref-index previous-ref ref-start (bgzf-tell bam) chunks
                                   (subseq intervals 0 (1+ last-interval)))
                    (setf eof t))
                   ((null aln)
@@ -150,7 +154,7 @@
                             (incf unmapped))
                            (t
                             (incf mapped)))
-                     (when (not (minusp pos))
+                     (unless (minusp pos)
                        (let* ((len (alignment-reference-length aln))
                               (bin-num (bin-num (alignment-bin aln) pos len))
                               (bin-chunks (gethash bin-num chunks))
