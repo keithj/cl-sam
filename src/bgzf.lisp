@@ -224,8 +224,14 @@ Returns:
 - The file position."
   (logior (ash (bgzf-position bgzf) 16) (bgzf-offset bgzf)))
 
+(defun bgzf-empty-p (bgzf)
+  "Returns T if all decompressed bytes have been read from the current
+decompressed BGZ block."
+  (= (bgzf-offset bgzf) (1- (length (bgzf-buffer bgzf)))))
+
 ;; As yet untested
 (defun bgzf-eof-p (bgzf)
+  "Returns T if the BGZF stream is terminated by an empty record."
   (let* ((stream (bgzf-stream bgzf))
          (pos (file-position stream)))
     (unwind-protect
