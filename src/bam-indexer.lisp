@@ -125,13 +125,15 @@
                          (bam-sort-error previous-ref previous-pos ref-id pos
                                          "previous position > current")
                          (setf previous-pos pos))
-                     (cond ((and (/= previous-ref ref-id) (minusp ref-id))
+                     (cond ((and (/= previous-ref ref-id)
+                                 (= ref-id +unknown-reference+))
                             (add-ref-index previous-ref ref-start file-pos
                                            chunks
                                            (subseq intervals 0
                                                    (1+ last-interval)))
                             (setf previous-ref ref-id))
-                           ((and (/= previous-ref ref-id) (minusp previous-ref))
+                           ((and (/= previous-ref ref-id)
+                                 (= +unknown-reference+ previous-ref))
                             (bam-sort-error previous-ref previous-pos ref-id pos
                                             (txt "alignment to reference ~a"
                                                  "after unassigned reads")
@@ -148,13 +150,13 @@
                                   last-interval 0
                                   mapped 0
                                   unmapped 0)))
-                     (cond ((minusp ref-id)
+                     (cond ((= +unknown-reference+ ref-id)
                             (incf unassigned))
                            ((query-unmapped-p flag)
                             (incf unmapped))
                            (t
                             (incf mapped)))
-                     (unless (minusp pos)
+                     (unless (= +unknown-position+ pos)
                        (let* ((len (alignment-reference-length aln))
                               (bin-num (bin-num (alignment-bin aln) pos len))
                               (bin-chunks (gethash bin-num chunks))
