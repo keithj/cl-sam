@@ -55,7 +55,7 @@
     (with-open-file (out index-file :direction :output :element-type 'octet)
       (ensure (write-bam-index index out)))
     (with-open-file (in index-file :element-type 'octet)
-      (let ((ensure (equalp index (read-bam-index in))))))
+      (ensure (equalp index (read-bam-index in))))
     (delete-file bam-file)
     (delete-file index-file)))
 
@@ -67,8 +67,7 @@
          (bam-file (gen-bam num-refs ref-len :end ref-len))
          (index (index-bam-file bam-file)))
     (flet ((count-in-region (&rest regions)
-             (with-bam (bam () bam-file :index index
-                            :regions regions)
+             (with-bam (bam () bam-file :index index :regions regions)
                (loop
                   while (has-more-p bam)
                   count (next bam)))))
