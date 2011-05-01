@@ -26,7 +26,8 @@
   ())
 
 (defclass bam-merge-stream (merge-stream wrapped-stream-mixin)
-  ())
+  ((buffer :initform (make-array 4 :element-type 'octet :initial-element 0)
+           :reader buffer-of)))
 
 (defmethod stream-read-element ((stream bam-sort-input-stream))
   (read-alignment (slot-value stream 'bgzf)))
@@ -71,14 +72,14 @@
            nil))))
 
 (defmethod initialize-instance :after ((stream bam-merge-stream) &key)
-  (with-accessors ((s stream-of) (h stream-head-of))
+  (with-accessors ((s stream-of) (h stream-head-of) (b buffer-of))
       stream
-    (setf h (%read-bam-alignment s))))
+    (setf h (%read-bam-alignment s b))))
 
 (defmethod stream-merge ((stream bam-merge-stream))
-  (with-accessors ((s stream-of) (h stream-head-of))
+  (with-accessors ((s stream-of) (h stream-head-of) (b buffer-of))
       stream
-    (setf h (%read-bam-alignment s))))
+    (setf h (%read-bam-alignment s b))))
 
 (declaim (inline alignment-record<))
 (defun alignment-record< (alignment-record1 alignment-record2)
@@ -100,11 +101,11 @@ identical to a coordinate sort performed by Picard 1.07."
   (let ((ref1 (reference-id alignment-record1))
         (ref2 (reference-id alignment-record2)))
     (declare (type int32 ref1 ref2))
-    (cond ((= -1 ref1 ref2)             ; unmapped reads
+    (cond ((= +unknown-reference+ ref1 ref2) ; unmapped reads
            nil)
-          ((= -1 ref1)                  ; unmapped read
+          ((= +unknown-reference+ ref1) ; unmapped read
            nil)
-          ((= -1 ref2)                  ; unmapped read
+          ((= +unknown-reference+ ref2) ; unmapped read
            t)
           ((= ref1 ref2)
            (let ((pos1 (alignment-position alignment-record1))
@@ -228,19 +229,18 @@ alignments that will be sorted in memory at any time, defaulting to
                          :key key :buffer-size buffer-size)))
 
 (declaim (inline %read-bam-alignment))
-(defun %read-bam-alignment (stream)
+(defun %read-bam-alignment (stream num-bytes)
   (declare (optimize (speed 3)))
-  (let ((alen-bytes (make-array 4 :element-type 'octet :initial-element 0)))
-    (if (zerop (read-sequence alen-bytes stream))
-        nil
-        (let ((record-length (decode-int32le alen-bytes)))
-          (check-record (not (minusp record-length)) ()
-                        "BAM record reported a record length of ~a"
-                        record-length)
+  (if (zerop (read-sequence num-bytes stream))
+      nil
+      (let ((record-length (decode-int32le num-bytes)))
+        (check-record (not (minusp record-length)) ()
+                      "BAM record reported a record length of ~a"
+                      record-length)
         (let ((record (make-array record-length :element-type 'octet
                                   :initial-element 0)))
           (read-sequence record stream)
-          record)))))
+          record))))
 
 (let ((buffer (make-array 100 :element-type 'base-char :initial-element #\Nul)))
   (defun parse-digits (bytes start end)
