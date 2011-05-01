@@ -19,24 +19,6 @@
 
 (in-package :sam)
 
-;; One region -> one reference, start & end, many chunks. Iterate over
-;; regions, making chunk queues. When changing region, only seek if the
-;; current position is too far from the next chunk. This means we need
-;; to check start and end positions of alignments.
-
-;; For each region, calculate chunks
-;; Maybe seek to first chunk
-;; Iterate through chunks, possibly seeking throughout
-
-;; (with-bam-index (index "/home/keith/index_test.bam.bai")
-;;   (let ((regions (mapcar (lambda (x)
-;;                            (apply #'region x)) '((1 1000 1010)
-;;                                                  (1 1000000 2000000)
-;;                                                  (1 1000 2000)
-;;                                                  (2 1000 1000000)))))
-;;     (with-bam (bam ()  "/home/keith/index_test.bam")
-;;       (make-bam-region-input bam index regions))))
-
 (defun make-bam-full-scan-input (bam)
   "Returns a generator function that returns BAM alignment records for
 BAM stream BAM by scanning the entire stream. This to be used in cases
