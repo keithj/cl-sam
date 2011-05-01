@@ -19,9 +19,6 @@
 
 (in-package :sam)
 
-(deftype bgz-payload-index ()
-  '(integer 0 65536))
-
 (defconstant +xlen+ 6
   "The value of the RCF1952 eXtra LENgth field used by BGZ members.")
 (defconstant +sf1+ (char-code #\B)
@@ -60,7 +57,7 @@ specification.
 - sf2: RCF1952 second extra SubField.
 - slen: RFC1952 Subfield LENgth.
 - bsize: SAM spec total Block (member) SIZE. The serialized value is
-  bsize -1.
+  (1- bsize).
 - udata: Uncompressed DATA."
   (sf1 +sf1+ :type uint8 :read-only t)
   (sf2 +sf2+ :type uint8 :read-only t)

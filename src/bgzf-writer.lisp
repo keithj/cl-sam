@@ -46,7 +46,7 @@
                                         0)
                        :suppress-header t :window-bits 15 :backoff 1024)
                    (declare (ignore deflated))
-                   (declare (type bgz-payload-index bytes-in bytes-out))
+                   (declare (type (integer 0 65536) bytes-in bytes-out))
                    (let* ((udata (subseq buf 0 bytes-in))
                           (bgz (make-bgz-member
                                 :mtime mtime :xlen +xlen+
