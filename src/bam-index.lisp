@@ -52,7 +52,7 @@ vector of bins (the binning index) and a vector of intervals (the
 linear index). The bins are sorted by increasing bin number. The
 binning index is hierarchical, while the linear index is flat, being a
 projection of reads from all bins onto a single vector."
-  (id -1 :type fixnum :read-only t)
+  (id +unknown-reference+ :type fixnum :read-only t)
   (bins (make-array 0 :initial-element nil) :type simple-vector)
   (intervals (make-array 0 :element-type 'fixnum)
              :type (simple-array fixnum (*))))
@@ -89,7 +89,8 @@ lie within a bin and are close together within the BAM file."
 (defstruct (region (:constructor make-region (&key ref start end))
                    (:constructor region (ref start end))
                    (:print-object print-region))
-  "A range of bases over a reference sequence."
+  "A range of bases over a reference sequence. A region is expressed
+in zero-based, half-open, interbase coordinates."
   (ref nil :type t)
   (start 0 :type fixnum)
   (end 0 :type fixnum))
@@ -258,62 +259,15 @@ seeking forward a short distance."
                      "the first virtual offset must be at or before the second")
     (>= (+ coffset1 *voffset-merge-distance*) coffset2)))
 
-;; TODO -- allow chunk queue to be created from a list of start/end
-;; pairs on a reference. Collect all the relevant bins first.
-;; (defun make-bam-chunk-queue (index reference-id start end)
-;;   "Returns a queue of merged chunks for reference REFERENCE-ID in INDEX,
-;; between reference positions START and END."
-;;   (queue-append (make-queue)
-;;                 (merge-chunks
-;;                  (sort (mapcan (lambda (bin)
-;;                                  (coerce (bin-chunks bin) 'list))
-;;                                (find-bins index reference-id start end))
-;;                        #'< :key #'chunk-start))))
-
-;; Ranges are (reference-id start end)
-;; (defun make-bam-chunk-queue2 (index regions)
-;;   (let* ((bins (delete-duplicates (mapcan (lambda (region)
-;;                                             (apply #'find-bins index region))
-;;                                           regions)))
-;;          (chunks (mapcan (lambda (bin)
-;;                            (coerce (bin-chunks bin) 'list))
-;;                          bins)))
-;;     (queue-append (make-queue)
-;;                   (merge-chunks (sort chunks #'< :key #'chunk-start)))))
-
 (defun make-bam-chunks (index region)
+  "Returns a list of read chunks from INDEX covering REGION, sorted by
+increasing chunk start."
   (let* ((bins (find-bins index (region-ref region) (region-start region)
                           (region-end region)))
          (chunks (mapcan (lambda (bin)
                            (coerce (bin-chunks bin) 'list))
                          bins)))
     (sort chunks #'< :key #'chunk-start)))
-
-;; (defun make-bam-chunk-input (bam chunks end)
-;;   "Returns a generator function that uses a queue of index CHUNKS to
-;; iterate over records in BAM stream BAM. The standard generator
-;; interface functions, CURRENT, NEXT and HAS-MORE-P may be used in
-;; operations on the returned generator."
-;;   (let ((chunk (queue-dequeue chunks))
-;;         (current (read-alignment bam)))
-;;     (defgenerator
-;;         (more (not (null current)))
-;;         (next (prog1
-;;                   current
-;;                 (if (null chunk)
-;;                     (setf current nil)
-;;                     (let ((aln (read-alignment bam)))
-;;                       (setf current (cond ((null aln)
-;;                                            nil)
-;;                                           ((> (alignment-position aln) end)
-;;                                            nil)
-;;                                           (t
-;;                                            aln)))
-;;                       (when (>= (bgzf-tell bam) (chunk-end chunk))
-;;                         (let ((next (queue-dequeue chunks)))
-;;                           (when next
-;;                             (bgzf-seek bam (chunk-start next)))
-;;                           (setf chunk next))))))))))
 
 (defun run-length-encode (intervals)
   "Returns a run-length encoded list representing INTERVALS, a BGZF
