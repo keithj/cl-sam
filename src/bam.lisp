@@ -100,7 +100,17 @@ file:
 ;;;                                 (< (mapping-quality x) 30)) in)))
 ;;;       (loop
 ;;;          while (has-more-p q30)
-;;;          do (consume out (next q30))))))"
+;;;          do (consume out (next q30))))))
+
+To count records with mapping quality of >= 30 in a set of genomic
+ranges, using an index:
+
+;;; (with-bam-index (index \"index.bai\")
+;;;   (with-bam (bam () bam-file :index index
+;;;                  :regions '((0 1000000 1100000) (1 1000000 1100000)))
+;;;     (loop
+;;;        while (has-more-p bam)
+;;;        count (>= (mapping-quality (next bam)) 30))))"
   (with-gensyms (bgzf hdr nrefs rmeta)
     (let ((header (or header `,hdr))
           (num-refs (or num-refs `,nrefs))
@@ -137,21 +147,6 @@ file:
                                         (make-bam-full-scan-input ,bgzf)))))
                        ,@body)))))))))
 
-(defgeneric encode-alignment-tag (value tag vector index)
-  (:documentation "Performs binary encoding of VALUE into VECTOR under
-  TAG at INDEX, returning VECTOR."))
-
-(defgeneric alignment-tag-documentation (tag)
-  (:documentation "Returns the documentation for TAG or NIL if none is
-  available."))
-
-(defmethod encode-alignment-tag (value tag vector index)
-  (declare (ignore value vector index))
-  (error "Unknown tag ~a." tag))
-
-(defmethod alignment-tag-documentation (tag)
-  (error "Unknown tag ~a." tag))
-
 (defmacro define-alignment-tag (tag value-type &optional docstring)
   "Defines a new alignment tag to hold a datum of a particular SAM
 type.
@@ -184,6 +179,109 @@ Optional:
        (defmethod alignment-tag-documentation ((tag (eql ,tag)))
          (declare (ignore tag))
          ,docstring))))
+
+(defstruct (alignment (:conc-name aln-)
+                      (:constructor make-aln (read-name seq-str qual-str flag
+                                              ref-id mate-ref-id pos mate-pos
+                                              cigar ref-len
+                                              map-qual insert-length
+                                              bin record))
+                      (:print-object print-aln))
+  (bin 0 :type uint16)
+  (flag 0 :type uint16)
+  (pos +unknown-position+ :type int32)
+  (mate-pos +unknown-position+ :type int32)
+  (ref-id +unknown-reference+ :type int32)
+  (mate-ref-id +unknown-reference+ :type int32)
+  (ref-len 0 :type fixnum)
+  (map-qual 0 :type uint8)
+  (insert-length 0 :type int32)
+  (read-name "*" :type simple-string)
+  (seq-str "*" :type simple-string)
+  (qual-str "*" :type simple-string)
+  (cigar nil :type list)
+  (record (make-array 0 :element-type 'octet) :type simple-octet-vector))
+
+(defun make-alignment (aln)
+  (make-aln (read-name aln) (seq-string aln) (quality-string aln)
+            (alignment-flag aln) (reference-id aln) (mate-reference-id aln)
+            (alignment-position aln) (mate-alignment-position aln)
+            (alignment-cigar aln) (alignment-reference-length aln)
+            (mapping-quality aln) (insert-length aln)
+            (alignment-bin aln)
+            aln))
+
+(defun print-aln (aln stream)
+  (print-unreadable-object (aln stream)
+    (princ (aln-read-name aln) stream)
+    (princ #\Space stream)
+    (format stream "~d:~d..~d:~d ~d ~a ~a ~s ~s"
+            (aln-ref-id aln) (aln-pos aln)
+            (aln-mate-ref-id aln) (aln-mate-pos aln)
+            (aln-map-qual aln)
+            (flag-symbol (alignment-flag (aln-record aln)))
+            (aln-cigar aln)
+            (aln-seq-str aln)
+            (aln-qual-str aln))))
+
+(defun flag-symbol (flag)
+  "Returns a 3 character string symbolising the read pairing denoted
+by FLAG. The left character indicates the query strand, the middle the
+alignment pairing and the right the mate strand.
+
+Query mapped forward  >
+Query mapped reverse  <
+Query unmapped        .
+
+Not paired             .
+Mapped proper pair     =
+Mapped pair            -
+Singleton              ~
+
+Mate mapped forward     >
+Mate mapped reverse     <
+Mate unmapped           ."
+  (let ((str (with-output-to-string (s)
+               (princ (cond ((query-unmapped-p flag)
+                             #\.)
+                            ((query-forward-p flag)
+                             #\>)
+                            (t
+                             #\<)) s)
+               (princ (cond ((not (sequenced-pair-p flag))
+                             #\.)
+                            ((mapped-proper-pair-p flag)
+                             #\=)
+                            ((and (query-mapped-p flag) (mate-mapped-p flag))
+                             #\-)
+                            (t
+                             #\~)) s)
+               (princ (cond ((not (sequenced-pair-p flag))
+                             #\Space)
+                            ((mate-unmapped-p flag)
+                             #\.)
+                            ((mate-forward-p flag)
+                             #\<)
+                            (t
+                             #\>)) s))))
+    (if (first-in-pair-p flag)
+        str
+        (nreverse str))))
+
+(defgeneric encode-alignment-tag (value tag vector index)
+  (:documentation "Performs binary encoding of VALUE into VECTOR under
+  TAG at INDEX, returning VECTOR."))
+
+(defgeneric alignment-tag-documentation (tag)
+  (:documentation "Returns the documentation for TAG or NIL if none is
+  available."))
+
+(defmethod encode-alignment-tag (value tag vector index)
+  (declare (ignore value vector index))
+  (error "Unknown tag ~a." tag))
+
+(defmethod alignment-tag-documentation (tag)
+  (error "Unknown tag ~a." tag))
 
 (define-alignment-tag :rg :string
   (txt "Read group. Value matches the header RG-ID tag if @RG is present"
