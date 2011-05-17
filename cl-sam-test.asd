@@ -1,5 +1,5 @@
 ;;;
-;;; Copyright (C) 2009-2010 Keith James. All rights reserved.
+;;; Copyright (C) 2009-2011 Keith James. All rights reserved.
 ;;;
 ;;; This file is part of cl-sam.
 ;;;
@@ -19,7 +19,8 @@
 
 (defsystem cl-sam-test
     :depends-on (:cl-sam
-                 (:version :lift "1.7.0"))
+                 (:version :lift "1.7.0")
+                 (:version :deoxybyte-io "0.9.6"))
     :components ((:module :cl-sam-test
                           :serial t
                           :pathname "test/"

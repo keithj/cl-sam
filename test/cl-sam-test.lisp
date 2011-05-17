@@ -22,6 +22,22 @@
 (deftestsuite cl-sam-tests ()
   ())
 
+(defmacro with-tmp-bam-file ((file) &body body)
+  `(handler-bind ((error #'leave-tmp-pathname))
+     (with-tmp-pathname (,file :tmpdir (merge-pathnames "data") :type "bam")
+       ,@body)))
+
+(defun make-aln-generators (num-refs read-group &rest args)
+  (loop
+     for ref-id from 0 below num-refs
+     collect (apply #'alignment-generator ref-id read-group args)))
+
+(defun generate-bam (filespec num-refs ref-len &rest args)
+  (let* ((read-group "read_group_0")
+         (gen (apply #'make-aln-generators num-refs read-group args)))
+    (apply #'generate-bam-file filespec num-refs ref-len (list read-group)
+           gen)))
+
 (defun test-binary-files (filespec1 filespec2)
   (with-open-file (s1 filespec1 :element-type 'octet)
     (with-open-file (s2 filespec2 :element-type 'octet)

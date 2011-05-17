@@ -80,11 +80,23 @@ Returns:
              finally (terpri ref))))
   filespec)
 
+(defun encode-phred-quality (q)
+  "Returns the character encoding Phred quality Q."
+  (code-char (+ q 33)))
+
+(defun default-seq-string (length)
+  (make-string length :initial-element #\A))
+
+(defun default-qual-string (length)
+  (make-string length :initial-element #\e))
+
 (defun alignment-generator (reference-id read-group
                             &key (read-length 50) name-suffix
                             (insert-length 250) (start 0)
                             (end (+ insert-length (* 2 read-length) 1))
-                            (step-size 10) (mapping-quality 50))
+                            (step-size 10) (mapping-quality 50)
+                            (seq-fn #'default-seq-string)
+                            (quality-fn #'default-qual-string))
   "Returns a new standard generator function which returns pairs of
 BAM alignment records.
 
@@ -113,8 +125,8 @@ Returns
         read1 read2)
     (defgenerator
         (more (< (+ i insert-length (* 2 read-length)) end))
-        (next (let ((seq (make-string read-length :initial-element #\a))
-                    (quality (make-string read-length :initial-element #\e))
+        (next (let ((seq (funcall seq-fn read-length))
+                    (quality (funcall quality-fn read-length))
                     (read-name (format nil "r~9,'0d~@[.~a~]" i name-suffix))
                     (pos1 i)
                     (pos2 (1- (+ i read-length insert-length)))
@@ -148,26 +160,48 @@ Returns
                       i (+ step-size i))
                 (values read1 read2))))))
 
-(defun generate-bam-file (filespec num-refs ref-length &rest aln-generators)
+(defun generate-bam-file (filespec num-refs ref-length read-groups
+                          &rest aln-generators)
   "Writes a very uniform BAM file to the file denoted by pathname
-designator FILESPEC, or testing purposes."
+designator FILESPEC, for testing purposes.
+
+
+Arguments:
+
+- filespec (pathname designator): The BAM file to be written.
+- num-refs (integer): The number of reference sequences in the BAM header.
+- read-groups (list of string): The read group names in the BAM header. Each
+  reference will have a set of reads generated in each read group.
+
+Rest:
+
+- aln-generators (list of function): A list of alignment generator functions
+  created with {defun alignment-generator} function. All of these functions
+  will be called until exhausted, so they should represent finite sequences.
+
+Returns
+
+- filespec."
   (check-arguments (and (integerp num-refs) (plusp num-refs)) (num-refs)
                    "must be a positive integer")
   (check-arguments (integerp ref-length) (ref-length)
                    "must be an integer")
   (let* ((tmp (tmp-pathname))
-         (read-group "generated_group")
          (ref-meta (loop
                       for i from 0 below num-refs
                       collect (list i (format nil "ref_~d" i) ref-length)))
          (header (with-output-to-string (s)
                    (write-sam-header
-                    (apply #'list
-                           (hd-record :version "1.3" :sort-order :coordinate)
-                          (rg-record read-group "generated")
-                          (loop
-                             for m in ref-meta
-                             collect (sq-record (second m) (third m)))) s))))
+                    (concatenate 'list
+                                 (list (hd-record :version "1.3"
+                                                  :sort-order :coordinate))
+                                 (mapcar (lambda (rg)
+                                           (rg-record rg "generated"))
+                                         read-groups)
+                                 (loop
+                                    for m in ref-meta
+                                    collect (sq-record (second m)
+                                                       (third m)))) s))))
     (with-bam (bam (header num-refs ref-meta) tmp :direction :output
                    :if-exists :supersede)
       (dolist (fn aln-generators)

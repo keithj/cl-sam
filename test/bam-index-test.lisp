@@ -24,62 +24,52 @@
 (deftestsuite bam-indexing-tests (cl-sam-tests)
   ())
 
-(defun gen-bam (num-refs ref-len &rest args)
-  (let ((aln-gen (loop
-                    for ref-id from 0 below num-refs
-                    collect (apply #'alignment-generator ref-id
-                                   "read_group_0" args))))
-    (apply #'generate-bam-file (tmp-pathname
-                                :tmpdir (merge-pathnames "data")
-                                :type "bam") num-refs ref-len aln-gen)))
-
 (addtest (bam-indexing-tests) index-bam-file/1
-  (let* ((num-refs 10)
-         (ref-len 1000)
-         (bam-file (gen-bam num-refs ref-len))
-         (index (index-bam-file bam-file)))
-    (ensure (probe-file bam-file))
-    (let ((n (length (bam-index-refs index))))
-      (ensure (= num-refs n)
-              :report "Expected ~d refs, but found ~d"
-              :arguments (num-refs n)))
-    (delete-file bam-file)))
+  (with-tmp-bam-file (file)
+    (let* ((num-refs 10)
+           (ref-len 1000)
+           (bam-file (generate-bam file num-refs ref-len))
+           (index (index-bam-file bam-file)))
+      (let ((n (length (bam-index-refs index))))
+        (ensure (= num-refs n)
+                :report "Expected ~d refs, but found ~d"
+                :arguments (num-refs n))))))
 
 (addtest (bam-indexing-tests) read/write-bam-index/1
-  (let* ((num-refs 10)
-         (ref-len 100000)
-         (bam-file (gen-bam num-refs ref-len))
-         (index (index-bam-file bam-file))
-         (index-file (merge-pathnames (make-pathname :type "bai") bam-file)))
-    (ensure (probe-file bam-file))
-    (with-open-file (out index-file :direction :output :element-type 'octet)
-      (ensure (write-bam-index index out)))
-    (with-open-file (in index-file :element-type 'octet)
-      (ensure (equalp index (read-bam-index in))))
-    (delete-file bam-file)
-    (delete-file index-file)))
+  (with-tmp-bam-file (file)
+    (let* ((num-refs 10)
+           (ref-len 100000)
+           (bam-file (generate-bam file num-refs ref-len))
+           (index (index-bam-file bam-file))
+           (index-file (merge-pathnames (make-pathname :type "bai") bam-file)))
+      (with-open-file (out index-file :direction :output :element-type 'octet)
+        (ensure (write-bam-index index out)))
+      (with-open-file (in index-file :element-type 'octet)
+        (ensure (equalp index (read-bam-index in))))
+      (delete-file index-file))))
 
 ;; last chunk ends at 162913:0
 
 (addtest (bam-indexing-tests) read-bam-range/1
-  (let* ((num-refs 1)
-         (ref-len 100000)
-         (bam-file (gen-bam num-refs ref-len :end ref-len))
-         (index (index-bam-file bam-file)))
-    (flet ((count-in-region (&rest regions)
-             (with-bam (bam () bam-file :index index :regions regions)
-               (loop
-                  while (has-more-p bam)
-                  count (next bam)))))
-      (mapcar (lambda (region expected)
-                (let ((count (count-in-region region)))
-                  (ensure (= expected count)
-                          :report "expected ~d, but found ~d"
-                          :arguments (expected count))))
-              (loop
-                 for i from 0 to 90000 by 10000
-                 collect (list 0 i (+ i 9999)))
-              '(1971 2009 2009 2009 2009 2009 2009 2009 2009 1968)))))
+  (with-tmp-bam-file (file)
+    (let* ((num-refs 1)
+           (ref-len 100000)
+           (bam-file (generate-bam file num-refs ref-len :end ref-len))
+           (index (index-bam-file bam-file)))
+      (flet ((count-in-region (&rest regions)
+               (with-bam (bam () bam-file :index index :regions regions)
+                 (loop
+                    while (has-more-p bam)
+                    count (next bam)))))
+        (mapcar (lambda (region expected)
+                  (let ((count (count-in-region region)))
+                    (ensure (= expected count)
+                            :report "expected ~d, but found ~d"
+                            :arguments (expected count))))
+                (loop
+                   for i from 0 to 90000 by 10000
+                   collect (list 0 i (+ i 9999)))
+                '(1971 2009 2009 2009 2009 2009 2009 2009 2009 1968))))))
 
 ;; (with-bam-index (index "/home/keith/index_test.bam.bai")
 ;;   (let ((regions (mapcar (lambda (x)

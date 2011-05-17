@@ -70,6 +70,10 @@
 ;; index block position as the end of the last block that contained
 ;; data i.e. the block prior to the BGZF EOF marker.
 
+;;; FIXME -- should store all previous reference ids to ensure that
+;;; out of reference order (but in coordinate order) records are
+;;; detected.
+
 (defun index-bam-file (filespec)
   "Returns a new BAM-INDEX object, given pathname designator FILESPEC."
   (with-bgzf (bam filespec)
