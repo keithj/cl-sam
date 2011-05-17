@@ -19,7 +19,7 @@
 
 (in-package :sam)
 
-(defparameter *sam-version* "1.3"
+(defparameter *sam-version* "1.4"
   "The SAM version written by cl-sam.")
 
 (defparameter *valid-header-types* '(:hd :sq :rg :pg :co)
@@ -99,8 +99,8 @@ header HEADER-TYPE."
    ("AS" :as) ("M5" :m5) ("SP" :sp) ("UR" :ur)))
 
 (define-header-tag-parser parse-rg-tag ("RG" value)
-  (("ID" :id) ("CN" :cn) ("DS" :ds)  ("DT" :dt) ("LB" :lb) ("PI" :pi)
-   ("PL" :pl) ("PU" :pu) ("SM" :sm)))
+  (("ID" :id) ("CN" :cn) ("DS" :ds)  ("DT" :dt) ("FO" :fo) ("KS" :ks)
+   ("LB" :lb) ("PI" :pi) ("PG" :pg) ("PL" :pl) ("PU" :pu) ("SM" :sm)))
 
 (define-header-tag-parser parse-pg-tag ("PG" value)
   (("ID" :id) ("CL" :cl) ("PN" :pn) ("PP" :pp) ("VN" :vn)))
@@ -168,7 +168,7 @@ of :HD , :SQ , :RG or :PG ."
   (assocdr tag (header-tags record)))
 
 (defun user-header-tag-p (tag)
-  "Returns T if TAG is a SAM 1.3 user-defined header tag. User-defined
+  "Returns T if TAG is a SAM 1.4 user-defined header tag. User-defined
 tags are recognised by containing lower case letters."
   (find-if #'lower-case-p (string tag)))
 

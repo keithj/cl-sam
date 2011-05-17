@@ -25,7 +25,6 @@
                           :serial t
                           :pathname "test/"
                           :components ((:file "package")
-                                       (:file "pileup-parser")
                                        (:file "cl-sam-test")
                                        (:file "sam-test")
                                        (:file "bam-test")

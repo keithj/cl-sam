@@ -118,10 +118,23 @@
    #:fails-platform-qc-p
    #:pcr/optical-duplicate-p
 
+   #:multiple-frags-p
+   #:proper-aligned-frags-p
+   #:frag-unmapped-p
+   #:frag-mapped-p
+   #:next-unmapped-p
+   #:frag-forward-p
+   #:frag-reverse-p
+   #:next-forward
+   #:next-reverse-p
+   #:first-frag-p
+   #:last-frag-p
+   #:medial-frag-p
+   #:unknown-frag-p
+
    #:valid-flag-p
    #:valid-mapped-pair-p
    #:valid-mapped-proper-pair-p
-   #:valid-pair-num-p
 
    #:alignment-core
    #:alignment-core-alist
