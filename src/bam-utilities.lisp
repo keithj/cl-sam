@@ -160,11 +160,40 @@ Returns
                       i (+ step-size i))
                 (values read1 read2))))))
 
+(defun default-orphanizer-test ()
+  "Returns a new orphanizer test that causes alternate last fragments
+to be omitted."
+  (let (orphanize)
+    (lambda (aln)
+      (let ((flag (alignment-flag aln)))
+        (cond ((and orphanize (last-frag-p flag))
+               (setf orphanize nil)
+               t)
+              ((last-frag-p flag)
+               (setf orphanize t)
+               nil)
+              (t
+               nil))))))
+
+(defun alignment-orphanizer (gen &key (test (default-orphanizer-test)))
+  "Given an alignment generator function GEN, returns a new function
+that omits some alignments, yielding orphans. Any alignments for which
+TEST returns T will be omitted. The default is to omit alternate last
+fragment alignments."
+ (defgenerator
+     (more (has-more-p gen))
+     (next (multiple-value-bind (fwd rev)
+               (next gen)
+             (values
+              (unless (funcall test fwd)
+                fwd)
+              (unless (funcall test rev)
+                rev))))))
+
 (defun generate-bam-file (filespec num-refs ref-length read-groups
                           &rest aln-generators)
   "Writes a very uniform BAM file to the file denoted by pathname
 designator FILESPEC, for testing purposes.
-
 
 Arguments:
 
@@ -193,7 +222,7 @@ Returns
          (header (with-output-to-string (s)
                    (write-sam-header
                     (concatenate 'list
-                                 (list (hd-record :version "1.3"
+                                 (list (hd-record :version *sam-version*
                                                   :sort-order :coordinate))
                                  (mapcar (lambda (rg)
                                            (rg-record rg "generated"))
@@ -207,9 +236,11 @@ Returns
       (dolist (fn aln-generators)
         (loop
            while (has-more-p fn)
-           do (multiple-value-bind (fwd rev)
+           do (multiple-value-bind (fwd rev) ; One may be nil to give orphans
                   (next fn)
-                (consume bam fwd)
-                (consume bam rev)))))
+                (when fwd
+                  (consume bam fwd))
+                (when rev
+                  (consume bam rev))))))
     (sort-bam-file tmp filespec)
     filespec))
