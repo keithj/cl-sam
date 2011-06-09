@@ -202,7 +202,8 @@ a {define-condition malformed-record-error} ."
 HEADER-RECORD or raises a {define-condition malformed-record-error} if
 invalid tags are present. Ignores any user tags (lower case tags)."
   (let* ((header-type (header-type record))
-         (tags (remove-if #'user-header-tag-p (header-tags record) :key #'first))
+         (tags (remove-if #'user-header-tag-p (header-tags record)
+                          :key #'first))
          (valid (valid-header-tags header-type))
          (tag-keys (mapcar #'first tags)))
     (unless (subsetp tag-keys valid)
@@ -432,7 +433,7 @@ present substituted by string VERSION, defaulting to *SAM-VERSION* ."
 (defun subst-sort-order (header order)
   "Returns a copy of HEADER with any sort order tag initially present
 substituted by symbol ORDER, which must be one of the valid SAM sort
-orders."
+orders. If there is no HD record in HEADER, one is added."
   (assert (member order *valid-sort-orders*) (order)
           "Invalid sort order ~a: expected one of ~a" order
           *valid-sort-orders*)
@@ -443,7 +444,7 @@ orders."
 (defun subst-group-order (header order)
   "Returns a copy of HEADER with any group order tag initially present
 substituted by symbol ORDER, which must be one of the valid SAM sort
-orders."
+orders. If there is no HD record in HEADER, one is added."
   (assert (member order *valid-group-orders*) (order)
           "Invalid group order ~a: expected one of ~a" order
           *valid-group-orders*)
@@ -482,12 +483,12 @@ malformed-field-error} ."
 (defun ensure-order (header domain)
   "Returns a copy of HEADER that is guaranteed to contain a sort tag
 for DOMAIN, which must be one of :sort or :group ."
-  (let ((hd (or (assoc :hd header)
-                (list :hd (cons :vn *sam-version*)))) ; Default if :HD is absent
-        (tag (ecase domain
-               (:sort :so)
-               (:group :go)))
-        (value (ecase domain
+  (let* ((header (ensure-sam-version header))
+         (hd (assoc :hd header))
+         (tag (ecase domain
+                (:sort :so)
+                (:group :go)))
+         (value (ecase domain
                (:sort :unsorted)
                (:group :none))))
     (cond ((null header)
