@@ -79,7 +79,7 @@ or raises a {define-condition malformed-file-error} if not."
           (if (plusp kludge)
               (make-samtools-bam-index :refs refs
                                        :unassigned (decode-int64le bytes))
-              (make-ref-index :refs refs)))))))
+              (make-bam-index :refs refs)))))))
 
 (defun read-ref-index (reference-id stream)
   "Reads an index for a single reference sequence from STREAM."
