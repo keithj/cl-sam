@@ -38,6 +38,9 @@
   dictated by the fact that the SAM spec makes 16 bits are avaliable
   for addressing positions with the BGZ member.")
 
+(defvar *default-compression* 5
+  "The default bgz compression level (Zlib level 5).")
+
 (defvar *empty-bgz-record*
   (make-array 28 :element-type 'octet
               :initial-contents
@@ -117,13 +120,15 @@ Rest:
       (when ,var
         (bgzf-close ,var)))))
 
-(defun bgzf-open (bgzfspec &rest args &key compression &allow-other-keys)
+(defun bgzf-open (bgzfspec &rest args &key (compression *default-compression*)
+                  &allow-other-keys)
   "Opens a block gzip file for reading or writing.
 
 Arguments:
 
-- bgzfspec (pathname designator or bgzf object): The file to open or
-an open bgzf object (which is returned unmodified).
+- bgzfspec (pathname designator, open stream or bgzf object): The file
+  to open or an open stream or bgzf object (which is returned unmodified).
+  The *standard-input* or *standard-ouput* streams may be used.
 
 Key:
 
@@ -137,13 +142,13 @@ Returns:
 - A BGZF structure."
   (typecase bgzfspec
     (bgzf bgzfspec)
-    (t (let ((stream (apply #'open bgzfspec :element-type 'octet
-                            (remove-key-values '(:element-type
-                                                 :compression) args))))
-         (if compression
-             (make-bgzf :stream stream :pathname bgzfspec
-                        :compression compression)
-             (make-bgzf :stream stream :pathname bgzfspec))))))
+    (t (let ((stream (if (streamp bgzfspec)
+                         bgzfspec
+                         (apply #'open bgzfspec :element-type 'octet
+                                (remove-key-values '(:element-type
+                                                     :compression) args)))))
+         (make-bgzf :stream stream :pathname bgzfspec
+                    :compression compression)))))
 
 (defun bgzf-close (bgzf)
   "Closes an open block gzip file.
