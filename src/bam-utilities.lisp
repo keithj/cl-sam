@@ -243,4 +243,5 @@ Returns
                 (when rev
                   (consume bam rev))))))
     (sort-bam-file tmp filespec)
+    (delete-file tmp)
     filespec))
