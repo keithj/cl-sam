@@ -71,6 +71,20 @@
                    collect (list 0 i (+ i 9999)))
                 '(1971 2009 2009 2009 2009 2009 2009 2009 2009 1968))))))
 
+(addtest (bam-indexing-tests) find-bam-index/1
+  ;; Picard naming only
+  (ensure (equal (merge-pathnames "data/test_find_bam_index0.bai")
+                 (find-bam-index
+                  (merge-pathnames "data/test_find_bam_index0.bam"))))
+  ;; Samtools naming only
+  (ensure (equal (merge-pathnames "data/test_find_bam_index1.bam.bai" )
+                 (find-bam-index
+                  (merge-pathnames "data/test_find_bam_index1.bam"))))
+  ;; Both
+  (ensure (equal (merge-pathnames "data/test_find_bam_index2.bai" )
+                 (find-bam-index
+                  (merge-pathnames "data/test_find_bam_index2.bam")))))
+
 ;; (with-bam-index (index "/home/keith/index_test.bam.bai")
 ;;   (let ((regions (mapcar (lambda (x)
 ;;                            (apply #'region x)) '((1 1000 1010)

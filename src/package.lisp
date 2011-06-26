@@ -157,6 +157,7 @@
    #:with-bam-index
    #:read-bam-index
    #:write-bam-index
+   #:find-bam-index
    #:index-bam-file
    #:find-bins
 

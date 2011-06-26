@@ -31,6 +31,7 @@
                                       :initial-contents '(66 65 73 1))
   "The BAI index file magic header bytes.")
 
+(defparameter *bam-index-file-type* "bai")
 (defparameter *tree-deepening-boundaries* '(4681 585  73   9   1))
 (defparameter *voffset-merge-distance* (expt 2 14)
   "If two index chunks are this number of bytes or closer to each
@@ -94,6 +95,17 @@ in zero-based, half-open, interbase coordinates."
   (ref nil :type t)
   (start 0 :type fixnum)
   (end 0 :type fixnum))
+
+(defun find-bam-index (bam-filespec)
+  "Returns the pathname of an index file for BAM-FILESPEC, if the file
+is present and conforms to the naming convention of either Picard or
+Samtools. If both are present, the Picard convention is favoured."
+  (let ((picard (make-pathname :type *bam-index-file-type*
+                               :defaults bam-filespec))
+        (samtools (make-pathname :name (file-namestring bam-filespec)
+                                 :type *bam-index-file-type*
+                                 :defaults bam-filespec)))
+    (or (fad:file-exists-p picard) (fad:file-exists-p samtools))))
 
 (defun print-ref-index (ref-index stream)
   "Prints a string representation of REF-INDEX to STREAM."
