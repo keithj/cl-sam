@@ -85,9 +85,12 @@ Returns:
   (declare (ignore abort))
   (when (open-stream-p stream)
     (unwind-protect
-         (if (bgzf-close (slot-value stream 'bgzf))
-             t
-             (error 'bgzf-io-error :text "failed to close file cleanly"))
+         (with-slots (bgzf)
+             stream
+           (if (bgzf-close bgzf)
+               t
+               (error 'bgzf-io-error :bgzf bgzf
+                      :text "failed to close file cleanly")))
       (call-next-method))))
 
 (defmethod stream-file-position ((stream bgzip-input-stream) &optional position)
@@ -97,7 +100,7 @@ Returns:
              (- num-bytes offset)))
       (cond (position
              (unless (bgzf-seek bgzf position)
-               (error 'bgzf-io-error :text "failed to seek in file"))
+               (error 'bgzf-io-error :bgzf bgzf :text "failed to seek in file"))
              (setf offset 0
                    num-bytes 0)
              t)

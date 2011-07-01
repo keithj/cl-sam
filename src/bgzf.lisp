@@ -211,7 +211,7 @@ Returns:
                  (bgzf-loaded-p bgzf) nil
                  (bgzf-load-seek bgzf) new-offset))
           (t
-           (error 'bgzf-io-error :text "failed to seek")))))
+           (error 'bgzf-io-error :bgzf bgzf :text "failed to seek")))))
 
 (defun bgzf-tell (bgzf)
   "Returns the current position in the encapsulated file of a block gzip
@@ -238,7 +238,7 @@ decompressed BGZ block."
          (pos (file-position stream)))
     (unwind-protect
          (cond ((< (file-length stream) (length *empty-bgz-record*))
-                (error 'bgzf-io-error :text "incomplete file"))
+                (error 'bgzf-io-error :bgzf bgzf :text "incomplete file"))
                ((file-position stream (- (file-length stream)
                                          (length *empty-bgz-record*)))
                 (loop

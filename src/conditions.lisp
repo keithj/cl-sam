@@ -20,15 +20,20 @@
 (in-package :sam)
 
 (define-condition bgzf-io-error (io-error simple-text-condition)
-  ((errno :initform nil
+  ((bgzf :initform nil
+         :initarg :bgzf
+         :reader bgzf-of
+         :documentation "The BGZF stream that caused the error.")
+   (errno :initform nil
           :initarg :errno
           :reader errno-of
           :documentation "The C error number."))
   (:report (lambda (condition stream)
-             (format stream "BGZF error~@[ ~d~]~@[: ~a~]"
-                     (errno-of condition) (message-of condition))))
+             (format stream "BGZF error~@[ ~a~]~@[ (errno ~d)~]~@[: ~a~]"
+                     (bgzf-of condition) (errno-of condition)
+                     (message-of condition))))
   (:documentation "A condition raised when an error occurs reading
-  from or writing to a BGZF file."))
+  from or writing to a BGZF stream."))
 
 (define-condition bam-error (error formatted-condition)
   ()
