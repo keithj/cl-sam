@@ -155,7 +155,7 @@ in operations on the returned generator."
   "Returns a new comparator function which sorts regions according to
 the BAM reference metadata REF-META. Ranges are sorted first by the
 reference order in the BAM file, then by region start and finally by
-region end."
+region end. Regions are sorted before they are normalised."
   (let ((lookup (loop
                    with x = (make-array (length ref-meta) :element-type 'fixnum)
                    for elt in ref-meta
@@ -167,6 +167,22 @@ region end."
           (< (region-start r1) (region-start r2))
           (and (= (region-start r1) (region-start r2))
                (< (region-end r1) (region-end r2)))))))
+
+(defun parse-region-string (str)
+  "Returns a new region from a string region designator in
+samtools-style format:
+
+  <reference name>:<start coordinate>-<end coordinate>
+
+The reference name must be one of those described in the BAM header
+metadata. The reference sequence coordinates are zero-based, half
+open with start < end."
+  (let ((colonpos (position #\: str :from-end t))
+        (dashpos (position #\- str :from-end t)))
+    (check-arguments (and dashpos colonpos) (str) "invalid region designator")
+    (list (subseq str 0 colonpos)
+          (parse-integer str :start (1+ colonpos) :end dashpos)
+          (parse-integer str :start (1+ dashpos)))))
 
 (defun normalise-regions (regions ref-meta)
   "Returns a list of REGIONS, normalised according to the BAM
@@ -204,7 +220,7 @@ by region end. Overlapping REGIONS are merged."
                           (setf r1 (copy-region r2)))
                          ((> (region-end r2) (region-end r1))
                           (setf (region-end r1) (region-end r2)))))))))
-    (merge-overlaps (normalise regions))))
+    (merge-overlaps (sort (normalise regions) (make-region< ref-meta)))))
 
 (defun partition-regions (regions)
   "Partitions a list of normalised REGIONS into lists, each pertaining

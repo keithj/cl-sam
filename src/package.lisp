@@ -81,6 +81,7 @@
    #:with-bam
    #:make-bam-input
    #:make-bam-output
+   #:parse-region-string
 
    ;; Low-level BAM API
    #:reference-id
