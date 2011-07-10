@@ -38,7 +38,7 @@
     (apply #'generate-bam-file filespec num-refs ref-len (list read-group)
            gen)))
 
-(defun test-binary-files (filespec1 filespec2)
+(defun test-binary-files-eql (filespec1 filespec2)
   (with-open-file (s1 filespec1 :element-type 'octet)
     (with-open-file (s2 filespec2 :element-type 'octet)
       (ensure (loop
@@ -51,3 +51,19 @@
                                ((null byte2)
                                 (file-position s1 (1- (file-position s1))))))
               :report "files were not byte identical"))))
+
+(defun test-sam-equal (filespec1 filespec2)
+  (with-bam (in1 (header1 num-refs1 ref-meta1) filespec1)
+    (with-bam (in2 (header2 num-refs2 ref-meta2) filespec2)
+      (loop
+         with refs1 = (make-reference-table ref-meta1)
+         with refs2 = (make-reference-table ref-meta2)
+         while (has-more-p in1)
+         for x = (next in1)
+         for y = (next in2)
+         do (ensure (equalp x y)
+                    :report "expected ~a but found ~a"
+                    :arguments ((with-output-to-string (s)
+                                  (write-sam-alignment x refs1 s))
+                                (with-output-to-string (s)
+                                  (write-sam-alignment y refs2 s))))))))

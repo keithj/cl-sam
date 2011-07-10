@@ -204,7 +204,7 @@
   (let ((in-filespec (namestring (merge-pathnames "data/c1215-name.bam")))
         (out-filespec (namestring
                        (tmp-pathname :tmpdir (merge-pathnames "data")
-                                     :basename "bam-roundtrip-"))))
+                                     :basename "bam-byte-round-trip-"))))
     (with-bgzf (in in-filespec :direction :input)
       (with-bgzf (out out-filespec :direction :output :if-exists :supersede)
         (multiple-value-bind (header num-refs ref-meta)
@@ -214,11 +214,58 @@
              for aln = (read-alignment in)
              while aln
              do (write-alignment out aln)))))
-    (test-binary-files in-filespec out-filespec)
+    (test-binary-files-eql in-filespec out-filespec)
     (with-bgzf (in in-filespec :direction :input)
       (ensure (bgzf-eof-p in)))
     (with-bgzf (out out-filespec :direction :input)
       (ensure (bgzf-eof-p out)))
+    (delete-file out-filespec)))
+
+(addtest (cl-sam-tests) bam-uncompressed-round-trip/1
+  (let ((in-filespec (namestring (merge-pathnames "data/c1215-name.bam")))
+        (out-filespec (namestring
+                       (tmp-pathname :tmpdir (merge-pathnames "data")
+                                     :basename "bam-uncompressed-roundtrip-"))))
+    (with-bam (in (header num-refs ref-meta) in-filespec)
+      (with-bam (out (header num-refs ref-meta) out-filespec
+                     :direction :output :if-exists :supersede :compression 0)
+        (loop
+           while (has-more-p in)
+           for aln = (next in)
+           do (consume out aln))))
+    (test-sam-equal in-filespec out-filespec)
+    (delete-file out-filespec)))
+
+(addtest (cl-sam-tests) bam-uncompressed-header/1
+  (let ((in-filespec (namestring (merge-pathnames "data/c1215-name.bam")))
+        (out-filespec (namestring
+                       (tmp-pathname :tmpdir (merge-pathnames "data")
+                                     :basename "bam-uncompressed-header-roundtrip-"))))
+    (with-bam (in (header num-refs ref-meta) in-filespec)
+      (with-bam (out (header num-refs ref-meta) out-filespec
+                     :direction :output :if-exists :supersede :compression 5
+                     :compress-header nil)
+        (loop
+           while (has-more-p in)
+           for aln = (next in)
+           do (consume out aln))))
+    (test-sam-equal in-filespec out-filespec)
+    (delete-file out-filespec)))
+
+(addtest (cl-sam-tests) bam-null-padded-header/1
+  (let ((in-filespec (namestring (merge-pathnames "data/c1215-name.bam")))
+        (out-filespec (namestring
+                       (tmp-pathname :tmpdir (merge-pathnames "data")
+                                     :basename "bam-null-padded-header-roundtrip-"))))
+    (with-bam (in (header num-refs ref-meta) in-filespec)
+      (with-bam (out (header num-refs ref-meta) out-filespec
+                     :direction :output :if-exists :supersede :compression 5
+                     :compress-header nil :pad-header 1024)
+        (loop
+           while (has-more-p in)
+           for aln = (next in)
+           do (consume out aln))))
+    (test-sam-equal in-filespec out-filespec)
     (delete-file out-filespec)))
 
 (addtest (cl-sam-tests) bam-semantic-round-trip/1
