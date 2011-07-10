@@ -19,7 +19,7 @@
 
 (in-package :sam)
 
-(defparameter *sam-version* "1.4"
+(defparameter *sam-version* "1.3"
   "The SAM version written by cl-sam.")
 
 (defparameter *valid-header-types* '(:hd :sq :rg :pg :co)
