@@ -23,12 +23,23 @@
                            &key (:compress t) (:mtime integer)) fixnum)
                 write-bytes))
 (defun write-bytes (bgzf bytes n &key (compress t) (mtime 0))
+  "Write N elements from vector BYTES to stream BGZF.
+
+Key:
+
+- compress (boolean): If T, compress at current BGZF compression level
+  when the current block becomes full. Defaults to T.
+- mtime (uint32): The zlib mtime. Defaults to 0.
+
+Returns:
+
+- The number of bytes written."
   (declare (optimize (speed 3) (safety 1)))
   (let ((stream (bgzf-stream bgzf)))
     (declare (type simple-octet-vector bytes)
              (type vector-index n))
     (labels ((buffer-full-p ()
-               (= (bgzf-pointer bgzf) (1- (length (bgzf-buffer bgzf)))))
+               (= (bgzf-pointer bgzf) (length (bgzf-buffer bgzf))))
              (store-overflow (num-deflated)
                (let* ((buf (bgzf-buffer bgzf))
                       (overflow (subseq buf num-deflated (bgzf-pointer bgzf))))
@@ -50,8 +61,10 @@
                    (let* ((udata (subseq buf 0 bytes-in))
                           (bgz (make-bgz-member
                                 :mtime mtime :xlen +xlen+
-                                :udata udata :cdata cdata :cend bytes-out
-                                :bsize (+ bytes-out +member-header-length+
+                                :udata udata :cdata cdata
+                                :cend bytes-out
+                                :bsize (+ bytes-out
+                                          +member-header-length+
                                           +member-footer-length+)
                                 :isize bytes-in
                                 :crc32 (gz:crc32 udata))))
@@ -60,7 +73,7 @@
                          (store-overflow bytes-in)
                          (setf (bgzf-pointer bgzf) 0))
                      buf)))))
-      (cond ((< (+ (bgzf-pointer bgzf) n) (1- (length (bgzf-buffer bgzf))))
+      (cond ((< (+ (bgzf-pointer bgzf) n) (length (bgzf-buffer bgzf)))
              (replace (bgzf-buffer bgzf) bytes :start1 (bgzf-pointer bgzf))
              (incf (bgzf-pointer bgzf) n)
              (when (buffer-full-p)
@@ -69,13 +82,12 @@
             (t
              (loop
                 with buffer = (bgzf-buffer bgzf)
-                for i = 0 then (1+ i)
-                while (< i n)
+                for i from 0 below n
                 do (progn
+                     (when (buffer-full-p)
+                       (setf buffer (deflate-to-bgz)))
                      (setf (aref buffer (bgzf-pointer bgzf)) (aref bytes i))
-                     (if (buffer-full-p)
-                         (setf buffer (deflate-to-bgz))
-                         (incf (bgzf-pointer bgzf))))
+                     (incf (bgzf-pointer bgzf)))
                 finally (return n)))))))
 
 (defun bgzf-flush (bgzf &key (compress t) (append-eof t) (mtime 0))
@@ -94,13 +106,13 @@
                  (bgz (make-bgz-member :mtime mtime
                                        :xlen +xlen+ :udata udata
                                        :cdata cdata :cend bytes-out
-                                       :bsize (+ bytes-out
-                                                 +member-header-length+
-                                                 +member-footer-length+)
+                                       :bsize  (+ bytes-out
+                                                  +member-header-length+
+                                                  +member-footer-length+)
                                        :isize bytes-in
                                        :crc32 (gz:crc32 udata))))
             (write-bgz-member bgz (bgzf-stream bgzf) (bgzf-util-buffer bgzf))
-            (if (< bytes-in (length buffer)) ; Didn't fit
+            (if (< bytes-in (1- (length buffer))) ; Didn't fit
                 (let ((overflow (subseq buffer bytes-in (bgzf-pointer bgzf))))
                   (replace buffer overflow)
                   (setf (bgzf-pointer bgzf) (length overflow))
