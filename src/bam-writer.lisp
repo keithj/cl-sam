@@ -48,13 +48,13 @@ header."
         (replace buffer hcodes :start1 4)))
     (write-bytes bgzf buffer (length buffer) :compress compress :mtime mtime)))
 
-(defun write-num-references (bgzf n)
+(defun write-num-references (bgzf n &key (compress t))
   "Writes the number of reference sequences N to handle BGZF."
   (let ((buffer (make-array 4 :element-type 'octet)))
     (encode-int32le n buffer)
-    (write-bytes bgzf buffer 4)))
+    (write-bytes bgzf buffer 4 :compress compress)))
 
-(defun write-reference-meta (bgzf ref-name ref-length)
+(defun write-reference-meta (bgzf ref-name ref-length &key (compress t))
   "Writes the metadata for a single reference sequence named REF-NAME,
 of length REF-LENGTH bases, to handle BGZF."
   (let* ((name-len (length ref-name))
@@ -69,7 +69,7 @@ of length REF-LENGTH bases, to handle BGZF."
     (map-into name-codes #'char-code ref-name)
     (replace buffer name-codes :start1 name-offset)
     (encode-int32le ref-length buffer ref-len-offset)
-    (write-bytes bgzf buffer buffer-len)))
+    (write-bytes bgzf buffer buffer-len :compress compress)))
 
 (declaim (ftype (function (bgzf simple-octet-vector) fixnum) write-alignment))
 (defun write-alignment (bgzf alignment-record)
@@ -91,11 +91,16 @@ contains one element per reference sequence, each element being a list
 of reference identifier, reference name and reference length. Returns
 the number of bytes written.
 
-Optional:
+Key:
 
+- compress-header (boolean): Compress the header block if T.
 - null-padding (fixnum): A number of null bytes to be appended to the
 end of the header string, as allowed by the SAM spec. This is useful
 for creating slack space so that BAM headers may be edited in place."
+  (check-arguments (or compress (<= (+ (length *bam-magic*) 4 (length header))
+                                    +bgz-max-payload-length+))
+                   (header)
+                   "header is too long to fit in the first block uncompressed")
   (+ (write-bam-magic bgzf :compress compress)
      (prog1
          (write-bam-header bgzf header :compress compress
@@ -105,7 +110,8 @@ for creating slack space so that BAM headers may be edited in place."
        ;; in their own block.
        (unless compress
          (bgzf-flush bgzf :compress compress :append-eof nil)))
-     (write-num-references bgzf num-refs)
+     (write-num-references bgzf num-refs :compress compress)
      (loop
         for (nil ref-name ref-length) in ref-meta
-        sum (write-reference-meta bgzf ref-name ref-length))))
+        sum (write-reference-meta bgzf ref-name ref-length
+                                  :compress compress))))
