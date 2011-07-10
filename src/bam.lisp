@@ -42,8 +42,8 @@
               :initial-contents '(#\Space #\Tab #\Linefeed #\Return)))
 
 (defmacro with-bam ((var (&optional header num-refs ref-meta) filespec
-                         &rest args &key (compress t) (null-padding 0)
-                         index regions &allow-other-keys)
+                         &rest args &key (compress-header t)
+                         (pad-header 0) index regions &allow-other-keys)
                     &body body)
   "Evaluates BODY with VAR bound to a new BAM generator function on
 pathname designator FILESPEC. The direction (:input versus :output) is
@@ -65,10 +65,14 @@ On writing, HEADER, NUM-REFS and REF-META should be bound to
 appropriate values for the BAM file metadata, which will be
 automatically written to the underlying stream.
 
-The COMPRESS and NULL-PADDING keyword arguments are only applicable on
-writing where they control whether the header block should be
-compressed and whether the header string should be padded with nulls
-to allow space for expansion.
+The COMPRESS-HEADER and PAD-HEADER keyword arguments are only
+applicable on writing where they control whether the records and
+header block should be compressed and whether the header string should
+be padded with nulls to allow space for expansion. Writing an
+uncompressed, padded header means that a header that fits in the first
+BGZF block may be updated without re-writing the entire BAM file. The
+BGZF COMPRESSION keyword is also accepted, permitting the Zlib
+compression level to be set for the stream.
 
 A list REGIONS may be supplied to limit the returned alignments to
 specific references and reference coordinates. REGIONS may be region
@@ -119,14 +123,14 @@ ranges, using an index:
                               (write-sam-header
                                `((:HD (:VN . ,*sam-version*))) s))))
         `(with-bgzf (,bgzf ,filespec ,@(remove-key-values
-                                        '(:compress :null-padding :index
-                                          :regions) args))
+                                        '(:compress-header :pad-header
+                                          :index :regions) args))
            ,@(if (search '(:direction :output) args)
                  `((write-bam-meta ,bgzf
                                    ,(or header default-header)
                                    ,(or num-refs 0) ,ref-meta
-                                   :compress ,compress
-                                   :null-padding ,null-padding)
+                                   :compress ,compress-header
+                                   :null-padding ,pad-header)
                    (let ((,var (make-bam-output ,bgzf)))
                      ,@body))
                  `((multiple-value-bind (,header ,num-refs ,ref-meta)
@@ -243,28 +247,18 @@ Mate mapped forward     >
 Mate mapped reverse     <
 Mate unmapped           ."
   (let ((str (with-output-to-string (s)
-               (princ (cond ((query-unmapped-p flag)
-                             #\.)
-                            ((query-forward-p flag)
-                             #\>)
-                            (t
-                             #\<)) s)
-               (princ (cond ((not (sequenced-pair-p flag))
-                             #\.)
-                            ((mapped-proper-pair-p flag)
-                             #\=)
-                            ((and (query-mapped-p flag) (mate-mapped-p flag))
-                             #\-)
-                            (t
-                             #\~)) s)
-               (princ (cond ((not (sequenced-pair-p flag))
-                             #\Space)
-                            ((mate-unmapped-p flag)
-                             #\.)
-                            ((mate-forward-p flag)
-                             #\<)
-                            (t
-                             #\>)) s))))
+               (princ (cond ((query-unmapped-p flag)       #\.)
+                            ((query-forward-p flag)        #\>)
+                            (t                             #\<)) s)
+               (princ (cond ((not (sequenced-pair-p flag)) #\.)
+                            ((mapped-proper-pair-p flag)   #\=)
+                            ((and (query-mapped-p flag)
+                                  (mate-mapped-p flag))    #\-)
+                            (t                             #\~)) s)
+               (princ (cond ((not (sequenced-pair-p flag)) #\Space)
+                            ((mate-unmapped-p flag)        #\.)
+                            ((mate-forward-p flag)         #\<)
+                            (t                             #\>)) s))))
     (if (first-in-pair-p flag)
         str
         (nreverse str))))
