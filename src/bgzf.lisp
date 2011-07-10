@@ -59,8 +59,7 @@ specification.
 - sf1: RCF1952 first extra SubField.
 - sf2: RCF1952 second extra SubField.
 - slen: RFC1952 Subfield LENgth.
-- bsize: SAM spec total Block (member) SIZE. The serialized value is
-  (1- bsize).
+- bsize: SAM spec total Block (member) SIZE. The serialized value is (1- bsize).
 - udata: Uncompressed DATA."
   (sf1 +sf1+ :type uint8 :read-only t)
   (sf2 +sf2+ :type uint8 :read-only t)
@@ -80,6 +79,10 @@ specification.
 - offset: The within-member offset component of the BGZF virtual file
   offset (least significant 16 bits). This is a position within the
   uncompressed data of the member.
+- pointer: The buffer index after the last usable data element. i.e.
+  the index at which new data may be written to the buffer prior to
+  deflating. Calling (subseq buffer 0 bgzf-pointer) will extract the
+  current usable bytes.
 - util-buffer: a 4 byte buffer used internally to store an integer.
 - loaded-p: T if the bgz data has been loaded into the buffer (used
   internally in decompression and reading).
@@ -89,12 +92,12 @@ specification.
   in decompression and reading)."
   (pathname nil :type t)
   (stream nil :type t)
-  (compression 5 :type (integer 0 9))
+  (compression *default-compression* :type (integer 0 9))
   (buffer (make-array +bgz-max-payload-length+ :element-type 'octet)
           :type simple-octet-vector)
   (position 0 :type (unsigned-byte 48))
   (offset 0 :type uint16)
-  (pointer 0 :type uint16)
+  (pointer 0 :type (integer 0 65536))
   (util-buffer (make-array 4 :element-type 'octet :initial-element 0)
                :type (simple-array octet (4)))
   (loaded-p nil :type t)
