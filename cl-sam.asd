@@ -1,5 +1,5 @@
 ;;;
-;;; Copyright (c) 2009-2011 Keith James. All rights reserved.
+;;; Copyright (c) 2009-2013 Keith James. All rights reserved.
 ;;;
 ;;; This program is free software: you can redistribute it and/or modify
 ;;; it under the terms of the GNU General Public License as published by
@@ -23,12 +23,11 @@
 
 (defsystem cl-sam
     :name "cl-sam"
-    :version "0.15.0"
+    :version "0.15.1"
     :author "Keith James"
     :licence "GPL v3"
-    :depends-on ((:version :cffi "0.10.3")
-                 (:version :deoxybyte-gzip "0.3.2")
-                 (:version :deoxybyte-unix "0.6.5"))
+    :depends-on ((:version :deoxybyte-gzip "0.5.1")
+                 (:version :deoxybyte-unix "0.7.2"))
     :in-order-to ((test-op (load-op :cl-sam :cl-sam-test)))
     :components
     ((:module :cl-sam
