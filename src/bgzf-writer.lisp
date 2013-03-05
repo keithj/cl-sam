@@ -1,5 +1,5 @@
 ;;;
-;;; Copyright (c) 2009-2011 Keith James. All rights reserved.
+;;; Copyright (c) 2009-2013 Keith James. All rights reserved.
 ;;;
 ;;; This file is part of cl-sam.
 ;;;
@@ -19,6 +19,18 @@
 
 (in-package :sam)
 
+(defun write-chunked-bytes (bgzf bytes n &key (compress t) (mtime 0))
+  (let ((chunk-size (- +bgz-max-payload-length+ 1024)))
+    (if (> n chunk-size)
+        (let ((num-chunks (ceiling n chunk-size)))
+          (loop
+             repeat num-chunks
+             for start = 0 then (+ start chunk-size)
+             for end = chunk-size then (min (+ end chunk-size) (length bytes))
+             sum (write-bytes bgzf (subseq bytes start end) (- end start)
+                              :compress compress :mtime mtime)))
+        (write-bytes bgzf bytes n :compress compress :mtime mtime))))
+
 (declaim (ftype (function (bgzf simple-octet-vector vector-index
                            &key (:compress t) (:mtime integer)) fixnum)
                 write-bytes))
@@ -35,7 +47,12 @@ Returns:
 
 - The number of bytes written."
   (declare (optimize (speed 3) (safety 1)))
-  (let ((stream (bgzf-stream bgzf)))
+  ;; (declare (optimize (debug 3) (safety 3)))
+  (let ((stream (bgzf-stream bgzf))
+        (compression (if compress
+                         (bgzf-compression bgzf)
+                         0))
+        (deflate-backoff 1024))
     (declare (type simple-octet-vector bytes)
              (type vector-index n))
     (labels ((buffer-full-p ()
@@ -52,10 +69,8 @@ Returns:
                                         :initial-element 0)))
                  (multiple-value-bind (deflated bytes-in bytes-out)
                      (gz:deflate-vector buf cdata
-                       :compression (if compress
-                                        (bgzf-compression bgzf)
-                                        0)
-                       :suppress-header t :window-bits 15 :backoff 1024)
+                       :compression compression :suppress-header t
+                       :window-bits 15 :backoff deflate-backoff)
                    (declare (ignore deflated))
                    (declare (type (integer 0 65536) bytes-in bytes-out))
                    (let* ((udata (subseq buf 0 bytes-in))
@@ -94,21 +109,23 @@ Returns:
   (if (plusp (bgzf-pointer bgzf))
       (let ((buffer (subseq (bgzf-buffer bgzf) 0 (bgzf-pointer bgzf)))
             (cdata (make-array +bgz-max-payload-length+ :element-type 'octet
-                               :initial-element 0)))
+                               :initial-element 0))
+            (compression (if compress
+                             (bgzf-compression bgzf)
+                             0))
+            (deflate-backoff 1024))
         (multiple-value-bind (deflated bytes-in bytes-out)
             (gz:deflate-vector buffer cdata
-              :compression (if compress
-                               (bgzf-compression bgzf)
-                               0)
-              :suppress-header t :window-bits 15 :backoff 1024)
+              :compression compression :suppress-header t
+              :window-bits 15 :backoff deflate-backoff)
           (declare (ignore deflated))
           (let* ((udata (subseq buffer 0 bytes-in))
                  (bgz (make-bgz-member :mtime mtime
                                        :xlen +xlen+ :udata udata
                                        :cdata cdata :cend bytes-out
-                                       :bsize  (+ bytes-out
-                                                  +member-header-length+
-                                                  +member-footer-length+)
+                                       :bsize (+ bytes-out
+                                                 +member-header-length+
+                                                 +member-footer-length+)
                                        :isize bytes-in
                                        :crc32 (gz:crc32 udata))))
             (write-bgz-member bgz (bgzf-stream bgzf) (bgzf-util-buffer bgzf))

@@ -1,5 +1,5 @@
 ;;;
-;;; Copyright (c) 2009-2011 Keith James. All rights reserved.
+;;; Copyright (c) 2009-2013 Keith James. All rights reserved.
 ;;;
 ;;; This file is part of cl-sam.
 ;;;
@@ -48,13 +48,13 @@ header."
         (replace buffer hcodes :start1 4)))
     (write-bytes bgzf buffer (length buffer) :compress compress :mtime mtime)))
 
-(defun write-num-references (bgzf n &key (compress t))
+(defun write-num-references (bgzf n)
   "Writes the number of reference sequences N to handle BGZF."
   (let ((buffer (make-array 4 :element-type 'octet)))
     (encode-int32le n buffer)
-    (write-bytes bgzf buffer 4 :compress compress)))
+    (write-bytes bgzf buffer 4)))
 
-(defun write-reference-meta (bgzf ref-name ref-length &key (compress t))
+(defun write-reference-meta (bgzf ref-name ref-length)
   "Writes the metadata for a single reference sequence named REF-NAME,
 of length REF-LENGTH bases, to handle BGZF."
   (let* ((name-len (length ref-name))
@@ -69,7 +69,7 @@ of length REF-LENGTH bases, to handle BGZF."
     (map-into name-codes #'char-code ref-name)
     (replace buffer name-codes :start1 name-offset)
     (encode-int32le ref-length buffer ref-len-offset)
-    (write-bytes bgzf buffer buffer-len :compress compress)))
+    (write-bytes bgzf buffer buffer-len)))
 
 (declaim (ftype (function (bgzf simple-octet-vector) fixnum) write-alignment))
 (defun write-alignment (bgzf alignment-record)
@@ -110,8 +110,7 @@ for creating slack space so that BAM headers may be edited in place."
        ;; in their own block.
        (unless compress
          (bgzf-flush bgzf :compress compress :append-eof nil)))
-     (write-num-references bgzf num-refs :compress compress)
+     (write-num-references bgzf num-refs)
      (loop
         for (nil ref-name ref-length) in ref-meta
-        sum (write-reference-meta bgzf ref-name ref-length
-                                  :compress compress))))
+        sum (write-reference-meta bgzf ref-name ref-length))))

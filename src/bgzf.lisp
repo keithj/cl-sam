@@ -1,5 +1,5 @@
 ;;;
-;;; Copyright (c) 2009-2011 Keith James. All rights reserved.
+;;; Copyright (c) 2009-2013 Keith James. All rights reserved.
 ;;;
 ;;; This file is part of cl-sam.
 ;;;
@@ -250,3 +250,28 @@ decompressed BGZ block."
                (t
                 nil))
       (file-position stream pos))))
+
+(defun inflate-bgz-member (bgz)
+  (let ((udata (make-array (bgz-member-isize bgz) :element-type 'octet
+                           :initial-element 0)))
+    (setf (bgz-member-udata bgz)
+          (gz:inflate-vector (bgz-member-cdata bgz)
+                             udata :suppress-header t :window-bits 15)))
+  bgz)
+
+(defun deflate-bgz-member (bgz &key (compression -1) (mtime 0) (backoff 0))
+  (let ((udata (bgz-member-udata bgz)))
+    (multiple-value-bind (cdata bytes-in bytes-out)
+        (gz:deflate-vector udata (bgz-member-cdata bgz)
+          :compression compression :suppress-header t
+          :window-bits 15 :backoff backoff)
+      (let ((udata-in (subseq udata 0 bytes-in)))
+        (setf (bgz-member-mtime bgz) mtime
+              (bgz-member-udata bgz) udata-in
+              (bgz-member-cdata bgz) cdata
+              (bgz-member-cend bgz) bytes-out
+              (bgz-member-bsize bgz) (+ bytes-out
+                                        +member-header-length+
+                                        +member-footer-length+)
+              (bgz-member-isize bgz) bytes-in
+              (bgz-member-crc32 bgz) (gz:crc32 udata-in))))))
