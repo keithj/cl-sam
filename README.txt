@@ -26,29 +26,15 @@ Read      No    Yes
 Write    Yes    Yes
 
 Sorting operations are available using an external merge sort that is
-extensible by user-supplied sorting predicates. Typical coordinate
-sort performance on the same 350 Mb queryname-sorted BAM file, median
-of 5 runs:
-
-                                 samtools C 0.1.8 sort      185 sec
-
-                            Picard 1.32       SortSam
-             (IcedTea Java 1.6 -server -Xmx2G, 64-bit)      170 sec
-
-                            cl-sam 0.9.5 sort-bam-file
-               (Steel Bank Common Lisp 1.0.43, 64-bit)      185 sec
+extensible by user-supplied sorting predicates.
 
 Installation
 
 cl-sam uses ASDF for system definition. Copy or symlink cl-sam.asd
 (and optionally cl-sam-test.asd) to your asdf:*central-registry* and
-load cl-sam with the asdf:operate function:
+load cl-sam with the asdf:load-system function:
 
- (asdf:operate 'asdf:load-op :cl-sam)
-
-or with the equivalent deoxybyte-systems:load-system function:
-
- (dxs:load-system :cl-sam)
+ (asdf:load-system :cl-sam)
 
 
 Tests
@@ -60,7 +46,7 @@ installed. Run the tests with the asdf:operate function:
 
 or with the equivalent deoxybyte-systems:test-system function:
 
- (dxs:test-system :cl-sam)
+ (asdf:test-system :cl-sam)
 
 
 Documentation
