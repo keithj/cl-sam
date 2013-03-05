@@ -1,5 +1,5 @@
 ;;;
-;;; Copyright (c) 2009-2011 Keith James. All rights reserved.
+;;; Copyright (c) 2009-2013 Keith James. All rights reserved.
 ;;;
 ;;; This file is part of cl-sam.
 ;;;
@@ -29,14 +29,15 @@
   "A mapping that describes the mandatory tags for each SAM header
   record type.")
 (defparameter *valid-header-tags*
-  (pairlis *valid-header-types* '((:vn :so :go)
-                                  (:sn :ln :as :m5 :ur :sp)
-                                  (:id :sm :lb :ds :pu :pi :cn :dt :pl)
-                                  (:id :pn :vn :pp :cl)
-                                  nil))
+  (pairlis *valid-header-types*
+           '((:vn :so :go)              ; @HD
+             (:sn :ln :as :m5 :ur :sp)  ; @SQ
+             (:id :sm :lb :ds :fo :ks :pu :pi :cn :dt :pl) ; @RG
+             (:id :pn :vn :pp :cl)      ; @PG
+             nil))                      ; @CO
   "A mapping that describes the valid tags for each SAM header record
   type.")
-(defparameter *valid-sort-orders* '(:unsorted :coordinate :queryname)
+(defparameter *valid-sort-orders* '(:unknown :unsorted :coordinate :queryname)
   "Valid values for SAM sort order tags.")
 (defparameter *valid-group-orders* '(:none :query :reference)
   "Valid values for SAM group order tags. Group order is no longer a
@@ -71,7 +72,9 @@ header HEADER-TYPE."
                  value
                  (error 'malformed-field-error :field value
                         :format-control "invalid SAM version number")))
-   ("SO" :so (cond ((string= "unsorted" value)
+   ("SO" :so (cond ((string= "unknown" value)
+                    :unknown)
+                   ((string= "unsorted" value)
                     :unsorted)
                    ((string= "queryname" value)
                     :queryname)
@@ -384,7 +387,8 @@ which is the same order as they are presented in the SAM spec."
 
 (defun rg-record (identity sample &key library description
                   (platform-unit :lane) (insert-size 0)
-                  sequencing-centre sequencing-date platform-tech)
+                  sequencing-centre sequencing-date platform-tech
+                  flow-order key-sequence)
   "Returns a new RG record."
   (assert (stringp identity) (identity)
           "IDENTITY should be a string, but was ~a" identity)
@@ -394,8 +398,9 @@ which is the same order as they are presented in the SAM spec."
                                           (plusp insert-size))) (insert-size)
           "INSERT-SIZE should be zero or a positive integer, but was ~a"
           insert-size)
-  ;; (:id :sm :lb :ds :pu :pi :cn :dt :pl)
-  (header-record :rg identity sample library description platform-unit
+  ;; (:id :sm :lb :ds :fo :ks :pu :pi :cn :dt :pl)
+  (header-record :rg identity sample library description
+                 flow-order key-sequence platform-unit
                  insert-size sequencing-centre sequencing-date platform-tech))
 
 (defun pg-record (identity &key program-name program-version previous-program
