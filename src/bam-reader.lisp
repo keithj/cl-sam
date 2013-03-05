@@ -1,5 +1,5 @@
 ;;;
-;;; Copyright (c) 2009-2011 Keith James. All rights reserved.
+;;; Copyright (c) 2009-2013 Keith James. All rights reserved.
 ;;;
 ;;; This file is part of cl-sam.
 ;;;
@@ -26,6 +26,7 @@ where a full scan is necessary, or as a fallback when neither index,
 nor regions are available. The standard generator interface functions
 NEXT and HAS-MORE-P may be used in operations on the returned
 generator."
+  (check-arguments (bgzf-p bam) (bam) "expected a BGZF stream handle")
   (let ((aln (read-alignment bam)))
     (defgenerator
         (more (not (null aln)))
@@ -41,6 +42,8 @@ in cases where a full scan is necessary, or as a fallback when an
 index is not available. The standard generator interface functions
 NEXT and HAS-MORE-P may be used in operations on the returned
 generator."
+  (check-arguments (bgzf-p bam) (bam) "expected a BGZF stream handle")
+  (check-arguments (listp regions) (regions) "expected a list of regions")
   (let ((regions (queue-append (make-queue) regions))
         ref-id rstart rend)
     (labels ((next-region ()
@@ -89,6 +92,9 @@ BAM stream BAM by scanning for alignments in the list of REGIONS.
 Note that REGIONS are zero-based, closed base coordinates. The
 standard generator interface functions NEXT and HAS-MORE-P may be used
 in operations on the returned generator."
+  (check-arguments (bgzf-p bam) (bam) "expected a BGZF stream handle")
+  (check-arguments (bam-index-p index) (index) "expected a BAM index")
+  (check-arguments (listp regions) (regions) "expected a list of regions")
   (let ((regions (queue-append (make-queue) regions))
         (chunks (make-queue))
         chunk ref-id rstart rend)
@@ -340,3 +346,50 @@ raising a {define-condition malformed-file-error} otherwise."
   (or (bgzf-eof-p bgzf)
       (error 'malformed-file-error :file (bgzf-pathname bgzf)
              :format-control "BGZF EOF was missing")))
+
+;; Have an option to count the bgz members as they are read. This will
+;; allow the number of blocks used by header, num-refs & ref-meta to
+;; be determined. This should fill a whole number of
+;; blocks. Alternatively the exact number of bytes could be recorded.
+
+(defun bam-meta-size (filespec)
+  "Returns the number of bytes occupied by the metadata in the BAM
+file FILESPEC. Metadata is defined here as the magic number, header
+and header padding, reference sequence count and reference sequence
+names and lengths."
+  (let ((n 0))
+    (with-bgzf (bgzf filespec)
+      (read-bam-magic bgzf)
+      (incf n 4)                       ; magic
+      (let* ((header (read-bam-header bgzf))
+             (num-refs (read-num-references bgzf)))
+        (incf n (+ 4 (length header))) ; header length int + header (no null)
+        (incf n 4)                     ; num-references int
+        (dotimes (nr num-refs)
+          (let ((ref-name (read-reference-meta bgzf)))
+            (incf n 4)                  ; reference name length int
+            (incf n (1+ (length ref-name))) ; reference name (with null)
+            (incf n 4)))))                  ; reference length int
+    n))
+
+(defun bam-meta-size2 (header &rest ref-meta)
+  (flet ((ref-meta-len (rm)
+           (+ 4 (1+ (length (second rm))) 4)))
+    (+ 4                                ; magic number
+       4                                ; header length
+       (length header)                  ; header
+       4                                ; num refs
+       (reduce #'+ ref-meta :key #'ref-meta-len))))
+
+(defun block-sizes (filespec n)
+  (let ((buf (make-array 4 :element-type 'octet :initial-element 0)))
+    (with-open-file (stream filespec :element-type 'octet)
+      (loop
+         repeat n
+         for bgz = (read-bgz-member stream buf)
+         while bgz
+         collect (list :header-size 18
+                       :isize (bgz-member-isize bgz)
+                       :bsize (bgz-member-bsize bgz)
+                       :footer-size 8
+                       :file-position (file-position stream))))))
