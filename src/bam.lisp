@@ -1091,6 +1091,8 @@ starting at INDEX."
   "Returns ALN having encoded character VALUE into it,
 starting at INDEX."
   (setf (aref aln index) (char-code #\A))
+  (unless (characterp value)
+    (setq value (char (string value) 0)))
   (encode-int8le (char-code value) aln (1+ index)))
 
 (defun encode-hex-tag (value aln index)
