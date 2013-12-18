@@ -23,12 +23,14 @@
 
 (defsystem cl-sam
     :name "cl-sam"
-    :version "0.15.1"
+    :version "0.16.0"
     :author "Keith James"
     :licence "GPL v3"
-    :depends-on ((:version :deoxybyte-gzip "0.5.1")
-                 (:version :deoxybyte-unix "0.7.2"))
-    :in-order-to ((test-op (load-op :cl-sam :cl-sam-test)))
+    :depends-on ((:version :deoxybyte-systems "1.0.0")
+                 (:version :deoxybyte-gzip "0.6.0")
+                 (:version :deoxybyte-unix "0.8.0"))
+    :in-order-to ((test-op (load-op :cl-sam :cl-sam-test))
+                  (doc-op (load-op :cl-sam :cldoc)))
     :components
     ((:module :cl-sam
               :serial t
@@ -50,10 +52,9 @@
                            (:file "sam-writer")
                            (:file "external-bam-sort")
                            (:file "bam-utilities")
-                           (:file "cl-sam")))
-     (:lift-test-config :lift-tests
-                        :pathname "cl-sam-test"
-                        :target-system :cl-sam)
-     (:cldoc-config :cldoc-documentation
-                    :pathname "doc/html/"
-                    :target-system :cl-sam)))
+                           (:file "cl-sam"))))
+    :perform (test-op :after (op c)
+                      (maybe-run-lift-tests :cl-sam
+                                            "cl-sam-test.config"))
+    :perform (doc-op :after (op c)
+                     (maybe-build-cldoc-docs :cl-sam "doc/html")))

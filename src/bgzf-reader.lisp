@@ -146,8 +146,10 @@ Returns:
                        (= +sf1+ sf1)
                        (= +sf2+ sf2)
                        (= +slen+ slen))
-            (let ((tmpl #.(txt "invalid BGZ header id1:~d id2:~d cm:~d flg:~d"
-                               "xlen:~d sf1:~d sf2:~d slen:~d at ~a in ~a")))
+            (let ((tmpl #.(concatenate 'string
+                                       "invalid BGZ header id1:~d id2:~d cm:~d "
+                                       "flg:~d xlen:~d sf1:~d sf2:~d slen:~d "
+                                       "aat ~a in ~a")))
               (error 'bgzf-io-error
                      :text (format nil tmpl id1 id2 cm flg xlen sf1 sf2 slen
                                    fpos stream))))

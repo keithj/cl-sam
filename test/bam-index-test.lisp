@@ -73,17 +73,20 @@
 
 (addtest (bam-indexing-tests) find-bam-index/1
   ;; Picard naming only
-  (ensure (equal (merge-pathnames "data/test_find_bam_index0.bai")
-                 (find-bam-index
-                  (merge-pathnames "data/test_find_bam_index0.bam"))))
+  (ensure (equal
+           (namestring (merge-pathnames "data/test_find_bam_index0.bai"))
+           (namestring (find-bam-index
+                        (merge-pathnames "data/test_find_bam_index0.bam")))))
   ;; Samtools naming only
-  (ensure (equal (merge-pathnames "data/test_find_bam_index1.bam.bai" )
-                 (find-bam-index
-                  (merge-pathnames "data/test_find_bam_index1.bam"))))
+  (ensure (equal
+           (namestring (merge-pathnames "data/test_find_bam_index1.bam.bai" ))
+           (namestring (find-bam-index
+                        (merge-pathnames "data/test_find_bam_index1.bam")))))
   ;; Both
-  (ensure (equal (merge-pathnames "data/test_find_bam_index2.bai" )
-                 (find-bam-index
-                  (merge-pathnames "data/test_find_bam_index2.bam")))))
+  (ensure (equal
+           (namestring (merge-pathnames "data/test_find_bam_index2.bai" ))
+           (namestring (find-bam-index
+                        (merge-pathnames "data/test_find_bam_index2.bam"))))))
 
 ;; (with-bam-index (index "/home/keith/index_test.bam.bai")
 ;;   (let ((regions (mapcar (lambda (x)

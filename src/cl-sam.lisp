@@ -75,17 +75,19 @@ SAM text format."
                       (mate-mapped-p flag)) into both-mapped
            count (and (query-mapped-p flag)
                       (mate-unmapped-p flag)) into singletons
-           finally (format stream #.(str "~d in total~%"
-                                         "~d QC failure~%"
-                                         "~d duplicates~%" 
-                                         "~d mapped (~$%)~%"
-                                         "~d paired in sequencing~%" 
-                                         "~d read1~%"
-                                         "~d read2~%" 
-                                         "~d properly paired (~$%)~%"
-                                         "~d both mapped~%" 
-                                         "~d singletons (~$%)~%"
-                                         "~d with repaired mapping flags~%")
+           finally (format stream
+                           #.(concatenate 'string
+                                          "~d in total~%"
+                                          "~d QC failure~%"
+                                          "~d duplicates~%"
+                                          "~d mapped (~$%)~%"
+                                          "~d paired in sequencing~%"
+                                          "~d read1~%"
+                                          "~d read2~%"
+                                          "~d properly paired (~$%)~%"
+                                          "~d both mapped~%"
+                                          "~d singletons (~$%)~%"
+                                          "~d with repaired mapping flags~%")
                            total qc-fail duplicates mapped
                            (* 100 (/ mapped total))
                            seq-paired read1 read2 proper-paired
