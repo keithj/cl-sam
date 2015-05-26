@@ -26,6 +26,8 @@
     :version "0.16.0"
     :author "Keith James"
     :licence "GPL v3"
+    :description "Toolkit for manipulation of DNA sequence alignment data stored
+    in the Sequence Alignment/Map (SAM) format."
     :depends-on ((:version :deoxybyte-systems "1.0.0")
                  (:version :deoxybyte-gzip "0.6.0")
                  (:version :deoxybyte-unix "0.8.0"))
