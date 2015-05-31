@@ -18,6 +18,9 @@
 ;;;
 
 (defsystem cl-sam-test
+    :author "Keith James"
+    :licence "GPL v3"
+    :description "Test system of cl-sam."
     :depends-on (:cl-sam
                  (:version :lift "1.7.0")
                  (:version :deoxybyte-io "0.9.6"))
